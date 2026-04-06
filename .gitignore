@@ -1,0 +1,12 @@
+# ignorar todas as chaves privadas e públicas
+*.pem
+02-mom-rabbitmq-promocoes/keys/*.pem
+
+# ignorar pastas de ambiente e cache
+__pycache__/
+.venv/
+venv/
+.DS_Store
+
+# ignorar configurações de IDE
+.vscode/
