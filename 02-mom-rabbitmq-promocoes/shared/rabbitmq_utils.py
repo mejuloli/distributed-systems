@@ -53,7 +53,7 @@ def publish_event(routing_key: str, payload: dict, signature: str, channel=None)
         exchange=EXCHANGE_NAME,
         routing_key=routing_key,
         body=message,
-        properties=pika.BasicProperties(delivery_mode=2),  # mensagem persistente
+        properties=pika.BasicProperties(delivery_mode=2),
     )
     print(f"  [→] Evento publicado em routing_key='{routing_key}'")
 
@@ -78,7 +78,7 @@ def publish_raw(routing_key: str, payload: dict, channel=None):
         exchange=EXCHANGE_NAME,
         routing_key=routing_key,
         body=message,
-        properties=pika.BasicProperties(delivery_mode=2),  # mensagem persistente
+        properties=pika.BasicProperties(delivery_mode=2),
     )
     print(f"  [→] Evento publicado em routing_key='{routing_key}'")
 

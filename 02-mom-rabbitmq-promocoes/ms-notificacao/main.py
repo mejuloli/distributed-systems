@@ -1,21 +1,11 @@
 """
 MS Notificação
-──────────────
-Distribui notificações de promoções para os clientes interessados.
+--------------
+Distribui notificações de promoções para os clientes interessados e republica promoções Hot Deals na categoria da promoção.
 
 Consome : promocao.publicada  (assinada com chave do MS Promoção)
           promocao.destaque   (assinada com chave do MS Ranking)
-Publica : promocao.<categoria>  - notificação de nova promoção na categoria
-                                  (também publicado com "hot deal" quando a
-                                   promoção for destacada pelo MS Ranking)
-
-IMPORTANTE: O MS Ranking já publica promocao.destaque diretamente no broker.
-Os clientes interessados em destaques consomem essa chave diretamente.
-O papel deste MS em relação a destaques é APENAS publicar uma notificação
-adicional em promocao.<categoria> contendo "hot deal" no payload, para que
-clientes inscritos naquela categoria também sejam avisados do destaque.
-
-Nota: o MS Notificação NÃO assina os eventos que publica (redistribuidor).
+Publica : promocao.<categoria>(não é assinada)
 """
 import sys
 import os
@@ -39,7 +29,6 @@ def _on_message(ch, method, props, body):
 
     print(f"\n[MS Notificação] Evento '{routing_key}' recebido: '{payload.get('titulo', '?')}'")
 
-    # determina o produtor esperado para validar assinatura
     if routing_key == "promocao.publicada":
         producer = "promocao"
     else:  # promocao.destaque
@@ -50,9 +39,8 @@ def _on_message(ch, method, props, body):
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
-    print(f"[MS Notificação] ✔ Assinatura válida ({producer}).")
+    print(f"[MS Notificação] Assinatura válida ({producer}).")
 
-    # ── Promoção nova publicada ────────────────────────────────
     if routing_key == "promocao.publicada":
         pid = payload["promocao_id"]
         categoria = payload["categoria"]
@@ -65,33 +53,23 @@ def _on_message(ch, method, props, body):
             "preco":        payload["preco"],
         }
         publish_raw(f"promocao.{categoria}", notif, ch)
-        print(f"[MS Notificação] ✔ Notificação enviada para categoria '{categoria}'.")
+        print(f"[MS Notificação] Notificação enviada para categoria '{categoria}'.")
 
-    # ── Promoção em destaque ───────────────────────────────────
     elif routing_key == "promocao.destaque":
         pid = payload["promocao_id"]
-        prom = payload
 
-        # O MS Ranking já publicou promocao.destaque direto no broker.
-        # Notifica na categoria da promoção (promocao.<categoria>) 
-        # para clientes que seguem a categoria mas talvez não estejam
-        # inscritos em promocao.destaque.
-        if prom:
-            categoria = prom.get("categoria", "desconhecida")
-            notif_cat = {
-                "promocao_id":  pid,
-                "titulo":       prom.get("titulo", "?"),
-                "categoria":    categoria,
-                "descricao":    prom.get("descricao", ""),
-                "preco":        prom.get("preco", 0),
-                "score":        payload["score"],
-                "hot_deal":     True,
-            }
-            publish_raw(f"promocao.{categoria}", notif_cat, ch)
-            print(f"[MS Notificação] ✔ Hot deal notificado em 'promocao.{categoria}' (id={pid}).")
-        else:
-            print(f"[MS Notificação] Promoção '{pid}' não encontrada no cache - "
-                  "notificação de categoria ignorada.")
+        categoria = payload.get("categoria", "desconhecida")
+        notif_cat = {
+            "promocao_id":  pid,
+            "titulo":       payload.get("titulo", "?"),
+            "categoria":    categoria,
+            "descricao":    payload.get("descricao", ""),
+            "preco":        payload.get("preco", 0),
+            "score":        payload["score"],
+            "hot_deal":     True,
+        }
+        publish_raw(f"promocao.{categoria}", notif_cat, ch)
+        print(f"[MS Notificação] Hot deal notificado em 'promocao.{categoria}' (id={pid}).")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 

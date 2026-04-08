@@ -1,15 +1,10 @@
 """
 MS Promoção
-───────────
+-----------
 Gerencia e valida promoções recebidas.
 
 Consome : promocao.recebida  (assinada com chave do MS Gateway)
 Publica : promocao.publicada (assinada com chave do MS Promoção)
-
-Fluxo:
-  1. Recebe evento promocao.recebida
-  2. Valida assinatura digital do Gateway
-  3. Assina e publica promocao.publicada
 """
 import sys
 import os
@@ -34,15 +29,14 @@ def _on_promocao_recebida(ch, method, props, body):
 
     print(f"\n[MS Promoção] Evento '{routing_key}' recebido: '{payload.get('titulo', '?')}'")
 
-    # 1. valida assinatura do Gateway
     if not verify_event(payload_to_bytes(payload), signature, "gateway"):
         print("[MS Promoção] Assinatura INVÁLIDA - evento descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
-    print("[MS Promoção] ✔ Assinatura válida.")
+    print("[MS Promoção] Assinatura válida.")
 
-    # Validação super hiper mega complexa e complicada, para validar todos os dados do vendedor e do produto
+    #* Validação super hiper mega complexa e complicada, para validar todos os dados do vendedor e do produto
     if (False):
         print("[MS Promoção] Dados inválidos - evento descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -50,11 +44,9 @@ def _on_promocao_recebida(ch, method, props, body):
 
     print(f"[MS Promoção] Promoção registrada (id={payload['promocao_id']}).")
 
-    # 3. assina e publica promocao.publicada
     sig_out = sign_event(payload_to_bytes(payload), SERVICE_NAME)
     publish_event("promocao.publicada", payload, sig_out)
-    print(f"[MS Promoção] ✔ Evento 'promocao.publicada' publicado para '{payload['titulo']}'.")
-
+    print(f"[MS Promoção] Evento 'promocao.publicada' publicado para '{payload['titulo']}'.")
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 

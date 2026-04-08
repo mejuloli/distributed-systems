@@ -1,6 +1,6 @@
 """
 MS Ranking
-──────────
+----------
 Processa votos e identifica promoções em destaque (hot deal).
 
 Consome : promocao.voto     (assinado com chave do MS Gateway)
@@ -35,27 +35,25 @@ def _on_voto(ch, method, props, body):
     payload = envelope["payload"]
     signature = envelope["signature"]
 
-    # 1. valida assinatura do Gateway
     if not verify_event(payload_to_bytes(payload), signature, "gateway"):
-        print("[MS Ranking] Assinatura INVÁLIDA - voto descartado.")
+        print("[MS Ranking] Assinatura INVÁLIDA - descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
     
     pid = payload.get("promocao_id", None)
     if not pid or not isinstance(pid, str):
-        print("[MS Ranking] ✗ Promoção ID ausente no voto - descartado.")
+        print("[MS Ranking] Promoção ID ausente no voto - descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
     voto = payload.get("voto", "")
     if voto not in ("positivo", "negativo"):
-        print(f"[MS Ranking] ✗ Voto inválido: '{voto}'. Descartado.")
+        print(f"[MS Ranking] Voto inválido: '{voto}' - descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
     print(f"\n[MS Ranking] Voto recebido para '{pid}'")
 
-    # 2. atualiza contadores
     if pid not in scores:
         scores[pid] = {"positivo": 0, "negativo": 0, "hot_deal": False}
 
@@ -64,7 +62,6 @@ def _on_voto(ch, method, props, body):
     print(f"[MS Ranking] Score de '{pid}': {score:+d}  "
           f"(+{scores[pid]['positivo']} / -{scores[pid]['negativo']})")
 
-    # 3. verifica hot deal
     if score >= HOT_DEAL_SCORE and not scores[pid]["hot_deal"]:
         scores[pid]["hot_deal"] = True
         hot_payload = {
@@ -78,7 +75,7 @@ def _on_voto(ch, method, props, body):
         }
         sig = sign_event(payload_to_bytes(hot_payload), SERVICE_NAME)
         publish_event("promocao.destaque", hot_payload, sig)
-        print(f"[MS Ranking] 🔥 HOT DEAL! Promoção '{pid}' promovida (score={score}).")
+        print(f"[MS Ranking] HOT DEAL! Promoção '{pid}' promovida (score={score}).")
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
