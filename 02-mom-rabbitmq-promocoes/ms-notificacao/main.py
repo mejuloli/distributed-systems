@@ -58,7 +58,6 @@ def _on_message(ch, method, props, body):
         categoria = payload["categoria"]
 
         notif = {
-            "tipo":         "nova_promocao",
             "promocao_id":  pid,
             "titulo":       payload["titulo"],
             "categoria":    payload["categoria"],
@@ -80,14 +79,13 @@ def _on_message(ch, method, props, body):
         if prom:
             categoria = prom.get("categoria", "desconhecida")
             notif_cat = {
-                "tipo":         "hot_deal",
                 "promocao_id":  pid,
                 "titulo":       prom.get("titulo", "?"),
                 "categoria":    categoria,
                 "descricao":    prom.get("descricao", ""),
                 "preco":        prom.get("preco", 0),
                 "score":        payload["score"],
-                "label":        "🔥 HOT DEAL",
+                "hot_deal":     True,
             }
             publish_raw(f"promocao.{categoria}", notif_cat, ch)
             print(f"[MS Notificação] ✔ Hot deal notificado em 'promocao.{categoria}' (id={pid}).")

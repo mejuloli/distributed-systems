@@ -59,7 +59,7 @@ class ClientePromocao:
 
         # Exibição
         print(f"\n{'═'*55}")
-        if payload.get("tipo") == "hot_deal" or payload.get("label") or payload.get("hot_deal"):
+        if rk == "promocao.destaque" or payload.get("hot_deal", False):
             print(f"[{self.nome}] 🔥 HOT DEAL - via '{rk}'")
             print(f"  Título    : {payload.get('titulo', '?')}")
             print(f"  Categoria : {payload.get('categoria', '?')}")
