@@ -19,7 +19,7 @@ def generate_key_pair(service_name: str):
     )
 
     priv_path = os.path.join(KEYS_DIR, f"{service_name}_private.pem")
-    pub_path  = os.path.join(KEYS_DIR, f"{service_name}_public.pem")
+    pub_path= os.path.join(KEYS_DIR, f"{service_name}_public.pem")
 
     with open(priv_path, "wb") as f:
         f.write(private_key.private_bytes(
@@ -34,7 +34,7 @@ def generate_key_pair(service_name: str):
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ))
 
-    print(f"[OK] Chaves geradas para '{service_name}':")
+    print(f" Chaves geradas para '{service_name}':")
     print(f"     Privada : {priv_path}")
     print(f"     Pública : {pub_path}")
 
@@ -42,4 +42,4 @@ def generate_key_pair(service_name: str):
 if __name__ == "__main__":
     for svc in SERVICES:
         generate_key_pair(svc)
-    print("\n✅ Todas as chaves foram geradas com sucesso!")
+    print("\n Todas as chaves foram geradas com sucesso!")

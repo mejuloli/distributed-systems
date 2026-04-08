@@ -7,8 +7,8 @@ import json
 import pika
 
 RABBITMQ_HOST = "localhost"
-EXCHANGE_NAME  = "Promocoes"
-EXCHANGE_TYPE  = "topic"
+EXCHANGE_NAME= "Promocoes"
+EXCHANGE_TYPE= "topic"
 
 
 def get_connection() -> pika.BlockingConnection:
@@ -26,7 +26,7 @@ def declare_exchange(channel):
 
 
 def payload_to_bytes(payload: dict) -> bytes:
-    """Serializa payload de forma determinística para assinar/verificar."""
+    """Serializa payload para assinar/verificar."""
     return json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
 
 
@@ -42,9 +42,10 @@ def publish_event(routing_key: str, payload: dict, signature: str, channel=None)
     }
     message = json.dumps(envelope, ensure_ascii=False).encode()
 
+    conn = None
     own_conn = channel is None
     if own_conn:
-        conn    = get_connection()
+        conn = get_connection()
         channel = conn.channel()
         declare_exchange(channel)
 
@@ -56,5 +57,30 @@ def publish_event(routing_key: str, payload: dict, signature: str, channel=None)
     )
     print(f"  [→] Evento publicado em routing_key='{routing_key}'")
 
+    if own_conn and conn:
+        conn.close()
+
+def publish_raw(routing_key: str, payload: dict, channel=None):
+    """
+    Publica um evento sem envelope de assinatura (direto para clientes).
+    Se channel for None, abre e fecha uma conexão temporária.
+    """
+    message = json.dumps(payload, ensure_ascii=False).encode()
+
+    conn = None
+    own_conn = channel is None
     if own_conn:
+        conn = get_connection()
+        channel = conn.channel()
+        declare_exchange(channel)
+
+    channel.basic_publish(
+        exchange=EXCHANGE_NAME,
+        routing_key=routing_key,
+        body=message,
+        properties=pika.BasicProperties(delivery_mode=2),  # mensagem persistente
+    )
+    print(f"  [→] Evento publicado em routing_key='{routing_key}'")
+
+    if own_conn and conn:
         conn.close()

@@ -3,45 +3,47 @@ MS Ranking
 ──────────
 Processa votos e identifica promoções em destaque (hot deal).
 
-Consome : promocao.voto     (do MS Gateway)
+Consome : promocao.voto     (assinado com chave do MS Gateway)
 Publica : promocao.destaque (assinado com chave do MS Ranking)
 
 Regra de hot deal:
     score = votos_positivos - votos_negativos >= HOT_DEAL_SCORE (padrão: 5)
-    Ao atingir o limite, publica promocao.destaque UMA ÚNICA VEZ por promoção.
+    Ao atingir o limite, publica promocao.destaque para a promoção.
+    Apenas uma vez por promoção (hot deal é um status, não reverte se o score cair depois).
 """
-
 import sys
 import os
 import json
-
+# garante que o python encontre a pasta 'shared'
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 from shared.rabbitmq_utils import (
     get_connection, declare_exchange, publish_event,
     payload_to_bytes, EXCHANGE_NAME,
 )
 from shared.crypto_utils import sign_event, verify_event
 
-SERVICE_NAME   = "ranking"
-QUEUE_NAME     = "Fila_Ranking"
+SERVICE_NAME = "ranking"
+QUEUE_NAME = "Fila_Ranking"
 HOT_DEAL_SCORE = 5
 
-# estrutura de scores: { promocao_id: { "positivo": N, "negativo": N, "hot_deal": bool } }
+# scores: { promocao_id: { "positivo": N, "negativo": N, "hot_deal": bool } }
 scores: dict[str, dict] = {}
 
 
 def _on_voto(ch, method, props, body):
-    envelope  = json.loads(body)
-    payload   = envelope["payload"]
+    envelope= json.loads(body)
+    payload = envelope["payload"]
     signature = envelope["signature"]
-
-    pid = payload.get("promocao_id", "?")
-    print(f"\n[MS Ranking] Voto recebido para '{pid}'")
 
     # 1. valida assinatura do Gateway
     if not verify_event(payload_to_bytes(payload), signature, "gateway"):
-        print("[MS Ranking] ⚠ Assinatura INVÁLIDA — voto descartado.")
+        print("[MS Ranking] Assinatura INVÁLIDA - voto descartado.")
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        return
+    
+    pid = payload.get("promocao_id", None)
+    if not pid or not isinstance(pid, str):
+        print("[MS Ranking] ✗ Promoção ID ausente no voto - descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
@@ -50,6 +52,8 @@ def _on_voto(ch, method, props, body):
         print(f"[MS Ranking] ✗ Voto inválido: '{voto}'. Descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
+
+    print(f"\n[MS Ranking] Voto recebido para '{pid}'")
 
     # 2. atualiza contadores
     if pid not in scores:
@@ -65,6 +69,10 @@ def _on_voto(ch, method, props, body):
         scores[pid]["hot_deal"] = True
         hot_payload = {
             "promocao_id": pid,
+            "titulo"   :   payload.get("titulo", "?"),
+            "categoria":   payload.get("categoria", "?"),
+            "descricao":   payload.get("descricao", ""),
+            "preco":       payload.get("preco", 0),
             "score":       score,
             "hot_deal":    True,
         }
@@ -77,17 +85,21 @@ def _on_voto(ch, method, props, body):
 
 def main():
     conn = get_connection()
-    ch   = conn.channel()
-    declare_exchange(ch)
+    try:
+        ch = conn.channel()
+        declare_exchange(ch)
 
-    ch.queue_declare(queue=QUEUE_NAME, durable=True)
-    ch.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_NAME, routing_key="promocao.voto")
-    ch.basic_qos(prefetch_count=1)
-    ch.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_voto)
+        ch.queue_declare(queue=QUEUE_NAME, durable=True)
+        ch.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_NAME, routing_key="promocao.voto")
+        ch.basic_qos(prefetch_count=1)
+        ch.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_voto)
 
-    print(f"[MS Ranking] Aguardando eventos 'promocao.voto'... "
-          f"(hot deal em score >= {HOT_DEAL_SCORE}) (Ctrl+C para sair)")
-    ch.start_consuming()
+        print(f"[MS Ranking] Aguardando eventos 'promocao.voto'... "
+            f"(hot deal em score >= {HOT_DEAL_SCORE}) (Ctrl+C para sair)")
+        ch.start_consuming()
+    except KeyboardInterrupt:
+        print("\n[MS Ranking] Interrompido. Encerrando conexão...")
+        conn.close()
 
 
 if __name__ == "__main__":

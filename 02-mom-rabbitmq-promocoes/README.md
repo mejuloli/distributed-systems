@@ -49,7 +49,8 @@ Para garantir que uma promoção não seja forjada ou alterada, utilizamos **Cri
 O sistema utiliza uma exchange do tipo **`topic`** chamada `Promocoes`.
 
 * **Routing Keys:** Utilizam o padrão hierárquico `promocao.<subtipo>`, permitindo bindings flexíveis. 
-* **Filas:** Cada microsserviço e cada cliente possui sua própria fila exclusiva, garantindo a independência dos processos.
+* **Filas Dinâmicas:** Cada processo possui sua própria fila. Os clientes geram filas dinâmicas temporárias que são excluídas automaticamente (auto_delete=True) ao encerrarem a conexão.
+* **Graceful Shutdown:** Interrupções nos terminais (Ctrl+C) disparam um encerramento seguro, fechando as conexões TCP com o broker sem deixar estados inconsistentes.
 
 ## 🏆 Regra do Hot Deal (Destaque)
 
@@ -58,11 +59,11 @@ $$\text{Score} = (\text{Votos Positivos} - \text{Votos Negativos}) \geq 5$$
 
 ## 🚀 Como Executar
 
-> **Nota:** Certifique-se de estar dentro da pasta `/02-mom-rabbitmq-promocoes`.
+> **Nota:** Certifique-se de estar dentro da pasta raiz do projeto `/02-mom-rabbitmq-promocoes`. É necessário criar e ativar um ambiente virtual (.venv) e instalar as dependências do requirements.txt antes de rodar os serviços locais.
 
 1.  **Subir Infraestrutura (Docker):**
     ```bash
-    docker-compose up -d
+    docker compose up -d
     ```
 2.  **Gerar Chaves RSA:**
     ```bash
@@ -75,10 +76,11 @@ $$\text{Score} = (\text{Votos Positivos} - \text{Votos Negativos}) \geq 5$$
     python ms-notificacao/main.py
     python ms-gateway/main.py
     ```
-4.  **Iniciar Clientes de Teste:**
+4.  **Iniciar Clientes de Teste:** 
+
+    Abra um ou mais terminais e execute o cliente universal. Um menu interativo permitirá escolher presets (A ou B) ou criar um cliente customizado ouvindo categorias específicas:
     ```bash
-    python ms-cliente/cliente_a.py
-    python ms-cliente/cliente_b.py
+    python ms-cliente/main.py
     ```
 
 ---
