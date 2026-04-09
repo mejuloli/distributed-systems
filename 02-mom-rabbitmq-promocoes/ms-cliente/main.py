@@ -13,9 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.rabbitmq_utils import get_connection, declare_exchange, EXCHANGE_NAME, payload_to_bytes
 from shared.crypto_utils import verify_event
 
-# chaves que sabemos que vêm direto do produtor e precisam de validação de assinatura
-SIGNED_KEYS = {"promocao.destaque"}
-
 
 class ClientePromocao:
     def __init__(self, nome: str, categorias: list[str], receber_destaques: bool = True):
@@ -30,34 +27,21 @@ class ClientePromocao:
 
     def _on_notificacao(self, ch, method, props, body):
         rk = method.routing_key
+        envelope = json.loads(body)
+        payload = envelope["payload"]
+        signature = envelope["signature"]
 
-        try:
-            data = json.loads(body)
-        except Exception:
-            print(f"[{self.nome}] ✗ Mensagem malformada em '{rk}' - descartada.")
+        if rk == "promocao.destaque":
+            producer = "ranking"
+        else:  
+            producer = "notificacao" 
+
+        #? cliente valida chave? acredito que não, mas por já que tem a assinatura vou validar mesmo assim
+        if not verify_event(payload_to_bytes(payload), signature, producer):
+            print(f"[MS Cliente] Assinatura INVÁLIDA ({producer}) - descartado.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
 
-        # tratamento rotas que são assinadas
-        if rk in SIGNED_KEYS:
-            # Assinada (Hot Deal)
-            if "payload" not in data or "signature" not in data:
-                print(f"[{self.nome}] ✗ Envelope ausente em '{rk}' - descartado.")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-            payload = data["payload"]
-            signature = data["signature"]
-
-            #? cliente valida chave? Acredito que não, mas por já que tem a assinatura vou validar mesmo assim
-            if not verify_event(payload_to_bytes(payload), signature, "ranking"):
-                print(f"[{self.nome}] Assinatura INVÁLIDA em '{rk}' - descartado.")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-        else:
-            # mensagens de categoria chegam raw do MS Notificação
-            payload = data
-
-        # exibição
         print(f"\n{'═'*55}")
         if rk == "promocao.destaque" or payload.get("hot_deal", False):
             print(f"[{self.nome}] 🔥 HOT DEAL - via '{rk}'")

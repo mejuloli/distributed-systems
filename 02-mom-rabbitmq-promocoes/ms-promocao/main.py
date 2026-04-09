@@ -42,7 +42,7 @@ def _on_promocao_recebida(ch, method, props, body):
 
     print("[MS Promoção] ✔ Assinatura válida.")
 
-    # Validação super hiper mega complexa e complicada, para validar todos os dados do vendedor e do produto
+    #* validação super hiper mega complexa e complicada, para validar todos os dados do vendedor e do produto
     if (False):
         print("[MS Promoção] Dados inválidos - evento descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)

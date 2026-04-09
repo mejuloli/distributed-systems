@@ -24,10 +24,11 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.rabbitmq_utils import (
     get_connection, declare_exchange, payload_to_bytes, 
-    publish_raw, EXCHANGE_NAME
+    publish_event, EXCHANGE_NAME
 )
-from shared.crypto_utils import verify_event
+from shared.crypto_utils import sign_event, verify_event
 
+SERVICE_NAME = "notificacao"
 QUEUE_NAME = "Fila_Notificacao"
 
 
@@ -52,46 +53,37 @@ def _on_message(ch, method, props, body):
 
     print(f"[MS Notificação] ✔ Assinatura válida ({producer}).")
 
-    # ── Promoção nova publicada ────────────────────────────────
+    # ── promoção nova publicada ────────────────────────────────
+    pid = payload["promocao_id"]
+    categoria = payload["categoria"]
     if routing_key == "promocao.publicada":
-        pid = payload["promocao_id"]
-        categoria = payload["categoria"]
-
         notif = {
             "promocao_id":  pid,
             "titulo":       payload["titulo"],
-            "categoria":    payload["categoria"],
+            "categoria":    categoria,
             "descricao":    payload["descricao"],
             "preco":        payload["preco"],
         }
-        publish_raw(f"promocao.{categoria}", notif, ch)
+        publish_event(f"promocao.{categoria}", notif, ch)
         print(f"[MS Notificação] ✔ Notificação enviada para categoria '{categoria}'.")
 
-    # ── Promoção em destaque ───────────────────────────────────
-    elif routing_key == "promocao.destaque":
-        pid = payload["promocao_id"]
-        prom = payload
-
-        # O MS Ranking já publicou promocao.destaque direto no broker.
-        # Notifica na categoria da promoção (promocao.<categoria>) 
+    else:
+        # o MS Ranking já publicou promocao.destaque direto no broker.
+        # notifica na categoria da promoção (promocao.<categoria>) 
         # para clientes que seguem a categoria mas talvez não estejam
         # inscritos em promocao.destaque.
-        if prom:
-            categoria = prom.get("categoria", "desconhecida")
-            notif_cat = {
-                "promocao_id":  pid,
-                "titulo":       prom.get("titulo", "?"),
-                "categoria":    categoria,
-                "descricao":    prom.get("descricao", ""),
-                "preco":        prom.get("preco", 0),
-                "score":        payload["score"],
-                "hot_deal":     True,
-            }
-            publish_raw(f"promocao.{categoria}", notif_cat, ch)
-            print(f"[MS Notificação] ✔ Hot deal notificado em 'promocao.{categoria}' (id={pid}).")
-        else:
-            print(f"[MS Notificação] Promoção '{pid}' não encontrada no cache - "
-                  "notificação de categoria ignorada.")
+        notif = {
+            "promocao_id":  pid,
+            "titulo":       payload["titulo"],
+            "categoria":    categoria,
+            "descricao":    payload["descricao"],
+            "preco":        payload["preco"],
+            "score":        payload["score"],
+            "hot_deal":     True,
+        }
+        print(f"[MS Notificação] Hot deal notificado em 'promocao.{categoria}' (id={pid}).")
+    sig_out = sign_event(payload_to_bytes(payload), SERVICE_NAME)
+    publish_event(f"promocao.{categoria}", notif, sig_out)
 
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
