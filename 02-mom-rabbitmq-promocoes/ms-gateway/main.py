@@ -97,7 +97,7 @@ def _menu():
     while True:
         print(f"\n--- [ STATUS: {len(promocoes_validadas)} itens validados ] ---")
         print("╔══════════════════════════════════════════╗")
-        print("║     🛒  MS Gateway DE PROMOÇÕES - Gateway   ║")
+        print("║     MS Gateway DE PROMOÇÕES - Gateway    ║")
         print("╠══════════════════════════════════════════╣")
         print("║  1. Cadastrar nova promoção              ║")
         print("║  2. Listar promoções (Lista Local)       ║")

@@ -59,28 +59,3 @@ def publish_event(routing_key: str, payload: dict, signature: str, channel=None)
 
     if own_conn and conn:
         conn.close()
-
-def publish_raw(routing_key: str, payload: dict, channel=None):
-    """
-    Publica um evento sem envelope de assinatura (direto para clientes).
-    Se channel for None, abre e fecha uma conexão temporária.
-    """
-    message = json.dumps(payload, ensure_ascii=False).encode()
-
-    conn = None
-    own_conn = channel is None
-    if own_conn:
-        conn = get_connection()
-        channel = conn.channel()
-        declare_exchange(channel)
-
-    channel.basic_publish(
-        exchange=EXCHANGE_NAME,
-        routing_key=routing_key,
-        body=message,
-        properties=pika.BasicProperties(delivery_mode=2),
-    )
-    print(f"  [→] Evento publicado em routing_key='{routing_key}'")
-
-    if own_conn and conn:
-        conn.close()

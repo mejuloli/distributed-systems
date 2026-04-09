@@ -13,13 +13,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.rabbitmq_utils import get_connection, declare_exchange, EXCHANGE_NAME, payload_to_bytes
 from shared.crypto_utils import verify_event
 
-SIGNED_KEYS = {"promocao.destaque"}
-
 
 class ClientePromocao:
     def __init__(self, nome: str, categorias: list[str], receber_destaques: bool = True):
         self.nome = nome
-        # Fila única identificável
+        # fila única identificável
         self.queue_name = f"Fila_{self.nome.replace(' ', '_')}_{str(uuid.uuid4())[:4]}"
         self.routing_keys = [f"promocao.{cat.lower().strip()}" for cat in categorias]
         if receber_destaques:
@@ -27,30 +25,20 @@ class ClientePromocao:
 
     def _on_notificacao(self, ch, method, props, body):
         rk = method.routing_key
+        envelope = json.loads(body)
+        payload = envelope["payload"]
+        signature = envelope["signature"]
 
-        try:
-            data = json.loads(body)
-        except Exception:
-            print(f"[{self.nome}] Mensagem malformada em '{rk}' - descartada.")
+        if rk == "promocao.destaque":
+            producer = "ranking"
+        else:  
+            producer = "notificacao" 
+
+        #? cliente valida chave? acredito que não, mas por já que tem a assinatura vou validar mesmo assim
+        if not verify_event(payload_to_bytes(payload), signature, producer):
+            print(f"[MS Cliente] Assinatura INVÁLIDA ({producer}) - descartado.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
-
-        # Tratamento rotas que são assinadas (Hot Deal)
-        if rk in SIGNED_KEYS:
-            if "payload" not in data or "signature" not in data:
-                print(f"[{self.nome}] Envelope ausente em '{rk}' - descartado.")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-            payload = data["payload"]
-            signature = data["signature"]
-
-            #? Cliente valida chave? Acredito que não, mas por já que tem a assinatura vou validar mesmo assim
-            if not verify_event(payload_to_bytes(payload), signature, "ranking"):
-                print(f"[{self.nome}] Assinatura INVÁLIDA em '{rk}' - descartado.")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-        else:
-            payload = data
 
         print(f"\n{'═'*55}")
         if rk == "promocao.destaque" or payload.get("hot_deal", False):
@@ -90,9 +78,6 @@ class ClientePromocao:
             if hasattr(self, 'conn') and self.conn.is_open:
                 self.conn.close()
 
-# --------------------------------------------------------------
-# Menu de Inicialização
-# --------------------------------------------------------------
 def main():
     print("╔══════════════════════════════════════════╗")
     print("║        INICIADOR DE CLIENTES             ║")
@@ -117,7 +102,7 @@ def main():
         nome = input("Digite o nome do cliente: ").strip() or "Cliente_Custom"
         cats_input = input("Digite as categorias de interesse separadas por vírgula (ex: roupas, carros, livros): ")
         
-        # Limpa e formata a lista de categorias
+        # limpa e formata a lista de categorias
         categorias = [c.strip() for c in cats_input.split(",") if c.strip()]
         
         destaque_input = input("Deseja receber notificações de Hot Deals gerais? (s/n): ").strip().lower()

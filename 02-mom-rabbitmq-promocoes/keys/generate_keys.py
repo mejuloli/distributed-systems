@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 import os
 
-SERVICES = ["gateway", "promocao", "ranking"]
+SERVICES = ["gateway", "promocao", "ranking", "notificacao"]
 KEYS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
