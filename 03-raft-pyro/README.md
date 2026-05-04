@@ -25,3 +25,14 @@ docker compose run --rm client python client.py
 ```
 
 ## estrutura
+
+```
+03-raft-pyro/
+├── docker-compose.yml
+├── node/
+│   ├── Dockerfile
+│   └── raft_node.py
+└── client/
+    ├── Dockerfile
+    └── client.py
+```
