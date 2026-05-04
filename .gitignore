@@ -4,9 +4,19 @@
 
 # ignorar pastas de ambiente e cache
 __pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
 .venv/
 venv/
+
+# ignorar arquivos de sistema
 .DS_Store
+Thumbs.db
 
 # ignorar configurações de IDE
 .vscode/
+.idea/
+
+# ignorar logs e dados temporários do docker
+*.log
