@@ -1,0 +1,128 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Raft + Pyro5 cluster
+#  Serviços:
+#    nameserver  – Pyro5 name server (porta 9090)
+#    node1..4    – nós Raft (portas 9091-9094)
+#    client      – cliente de demonstração
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Pyro5 Name Server ───────────────────────────────────────────────────────
+  nameserver:
+    image: python:3.11-slim
+    container_name: nameserver
+    hostname: nameserver
+    command: >
+      sh -c "pip install -q pyro5 serpent msgpack &&
+             python -m Pyro5.nameserver --host 0.0.0.0 --port 9090"
+    ports:
+      - "9090:9090"
+    networks:
+      - raft-net
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import Pyro5.api; Pyro5.api.locate_ns(host='nameserver', port=9090)"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Raft Node 1 ─────────────────────────────────────────────────────────────
+  node1:
+    build:
+      context: ./node
+    container_name: node1
+    hostname: node1
+    environment:
+      NODE_ID:   "1"
+      NODE_PORT: "9091"
+      NS_HOST:   nameserver
+      NS_PORT:   "9090"
+    ports:
+      - "9091:9091"
+    networks:
+      - raft-net
+    depends_on:
+      nameserver:
+        condition: service_healthy
+
+  # ── Raft Node 2 ─────────────────────────────────────────────────────────────
+  node2:
+    build:
+      context: ./node
+    container_name: node2
+    hostname: node2
+    environment:
+      NODE_ID:   "2"
+      NODE_PORT: "9092"
+      NS_HOST:   nameserver
+      NS_PORT:   "9090"
+    ports:
+      - "9092:9092"
+    networks:
+      - raft-net
+    depends_on:
+      nameserver:
+        condition: service_healthy
+
+  # ── Raft Node 3 ─────────────────────────────────────────────────────────────
+  node3:
+    build:
+      context: ./node
+    container_name: node3
+    hostname: node3
+    environment:
+      NODE_ID:   "3"
+      NODE_PORT: "9093"
+      NS_HOST:   nameserver
+      NS_PORT:   "9090"
+    ports:
+      - "9093:9093"
+      
+    networks:
+      - raft-net
+    depends_on:
+      nameserver:
+        condition: service_healthy
+
+  # ── Raft Node 4 ─────────────────────────────────────────────────────────────
+  node4:
+    build:
+      context: ./node
+    container_name: node4
+    hostname: node4
+    environment:
+      NODE_ID:   "4"
+      NODE_PORT: "9094"
+      NS_HOST:   nameserver
+      NS_PORT:   "9090"
+    ports:
+      - "9094:9094"
+    networks:
+      - raft-net
+    depends_on:
+      nameserver:
+        condition: service_healthy
+
+  # ── Client ──────────────────────────────────────────────────────────────────
+  client:
+    build:
+      context: ./client
+    container_name: client
+    hostname: client
+    environment:
+      NS_HOST: nameserver
+      NS_PORT: "9090"
+    networks:
+      - raft-net
+    depends_on:
+      - node1
+      - node2
+      - node3
+      - node4
+
+networks:
+  raft-net:
+    driver: bridge
