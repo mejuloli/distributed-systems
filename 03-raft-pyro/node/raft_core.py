@@ -179,7 +179,8 @@ class RaftNode:
                         self._become_leader()
 
         except Pyro5.errors.CommunicationError as e:
-            # Nó caiu ou rede falhou. Comportamento esperado em Sistemas Distribuídos.
+            # nó caiu ou rede falhou
+            # comportamento esperado em sistemas distribuídos
             self.log.warning(f"request_vote Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
             # Erros de código interno (TypeErrors, KeyErrors, etc)
@@ -233,10 +234,11 @@ class RaftNode:
                     self.next_index[peer_id] = min(max(0, ni - 1), follower_log_len)
 
         except Pyro5.errors.CommunicationError as e:
-            # Nó caiu ou rede falhou. Comportamento esperado em Sistemas Distribuídos.
+            # nó caiu ou rede falhou
+            # comportamento esperado em sistemas distribuídos
             self.log.warning(f"append_entries Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
-            # Erros de código interno (TypeErrors, KeyErrors, etc)
+            # erros de código interno (TypeErrors, KeyErrors, etc)
             self.log.error(f"append_entries Falha critica ao se comunicar com {peer_id}: {e}")
 
     def _advance_commit_index(self):
