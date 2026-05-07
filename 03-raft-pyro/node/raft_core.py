@@ -2,60 +2,20 @@
 # cada nó pode ser seguidor, candidato ou lider
 
 import Pyro5.api
-import Pyro5.server
+import Pyro5.errors
 import threading
 import random
 import time
-import os
 import sys
 import logging
+from models import State, LogEntry
+from config import (NODE_ID, NODE_PORT, PEERS, NS_HOST, NS_PORT, OBJECT_ID, HEARTBEAT_INTERVAL, ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-
-# configuração
-
-NODE_ID   = int(os.environ["NODE_ID"])          # 1, 2, 3 ou 4
-NODE_PORT = int(os.environ["NODE_PORT"])         # 9091 a 9094
-NS_HOST   = os.environ.get("NS_HOST", "nameserver")
-NS_PORT   = int(os.environ.get("NS_PORT", 9090))
-
-# uris fixos dos nós (objectId@host:porta)
-PEERS: dict[int, str] = {
-    1: "PYRO:raft.node.1@node1:9091",
-    2: "PYRO:raft.node.2@node2:9092",
-    3: "PYRO:raft.node.3@node3:9093",
-    4: "PYRO:raft.node.4@node4:9094",
-}
-OBJECT_ID = f"raft.node.{NODE_ID}"
-
-# intervalos de tempo (em segundos)
-HEARTBEAT_INTERVAL      = 0.5
-ELECTION_TIMEOUT_MIN    = 1.5
-ELECTION_TIMEOUT_MAX    = 3.0
-
-
-class State:
-    FOLLOWER  = "follower"
-    CANDIDATE = "candidate"
-    LEADER    = "leader"
-
-
-class LogEntry:
-    def __init__(self, term: int, command: str):
-        self.term    = term
-        self.command = command
-
-    def to_dict(self) -> dict:
-        return {"term": self.term, "command": self.command}
-
-    @staticmethod
-    def from_dict(d: dict) -> "LogEntry":
-        return LogEntry(d["term"], d["command"])
-
 
 @Pyro5.api.expose
 class RaftNode:
@@ -218,8 +178,12 @@ class RaftNode:
                     if len(self.votes_received) >= majority:
                         self._become_leader()
 
+        except Pyro5.errors.CommunicationError as e:
+            # Nó caiu ou rede falhou. Comportamento esperado em Sistemas Distribuídos.
+            self.log.warning(f"request_vote Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
-            self.log.debug(f"request_vote para no {peer_id} falhou: {e}")
+            # Erros de código interno (TypeErrors, KeyErrors, etc)
+            self.log.error(f"request_vote Falha critica ao se comunicar com {peer_id}: {e}")
 
     # replicação de log  §5.3
 
@@ -263,11 +227,17 @@ class RaftNode:
                     self.next_index[peer_id]  = new_match + 1
                     self._advance_commit_index()
                 else:
-                    # decrementa e tenta novamente  §5.3
-                    self.next_index[peer_id] = max(0, ni - 1)
+                    # otimização: recua o índice de uma vez usando o tamanho do log do seguidor
+                    # o get previne quebras caso fale com um nó desatualizado que não mandou log_len
+                    follower_log_len = result.get("log_len", max(0, ni - 1))
+                    self.next_index[peer_id] = min(max(0, ni - 1), follower_log_len)
 
+        except Pyro5.errors.CommunicationError as e:
+            # Nó caiu ou rede falhou. Comportamento esperado em Sistemas Distribuídos.
+            self.log.warning(f"append_entries Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
-            self.log.debug(f"append_entries para no {peer_id} falhou: {e}")
+            # Erros de código interno (TypeErrors, KeyErrors, etc)
+            self.log.error(f"append_entries Falha critica ao se comunicar com {peer_id}: {e}")
 
     def _advance_commit_index(self):
         # confirma entradas replicadas na maioria dos servidores  §5.3
@@ -343,7 +313,7 @@ class RaftNode:
                 self._become_follower(term)
 
             if term < self.current_term:
-                return {"term": self.current_term, "success": False}
+                return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
 
             # mensagem válida do líder, reseta o temporizador de eleição
             self.state     = State.FOLLOWER
@@ -353,11 +323,11 @@ class RaftNode:
             # verificação de consistência  §5.3
             if prev_log_index >= 0:
                 if len(self.log_entries) <= prev_log_index:
-                    return {"term": self.current_term, "success": False}
+                    return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
                 if self.log_entries[prev_log_index].term != prev_log_term:
                     # remove entrada conflitante e todas as seguintes  §5.3
                     self.log_entries = self.log_entries[:prev_log_index]
-                    return {"term": self.current_term, "success": False}
+                    return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
 
             # adiciona novas entradas
             for i, ed in enumerate(entries):
@@ -419,37 +389,3 @@ class RaftNode:
                 "applied_commands": list(self.applied_commands),
             }
 
-
-# ponto de entrada
-
-def main():
-    # aguarda o servidor de nomes subir
-    time.sleep(3)
-
-    daemon = Pyro5.server.Daemon(host=f"node{NODE_ID}", port=NODE_PORT)
-    node   = RaftNode()
-    uri    = daemon.register(node, objectId=OBJECT_ID)
-
-    # registra no servidor de nomes
-    connected = False
-    for attempt in range(10):
-        try:
-            ns = Pyro5.api.locate_ns(host=NS_HOST, port=NS_PORT)
-            ns.register(OBJECT_ID, uri)
-            print(f"[no{NODE_ID}] registrado: {uri}", flush=True)
-            connected = True
-            break
-        except Exception as e:
-            print(f"[no{NODE_ID}] ns indisponivel ({e}), tentativa {attempt+1}/10...", flush=True)
-            time.sleep(2)
-
-    if not connected:
-        print(f"[no{NODE_ID}] nao foi possivel conectar ao servidor de nomes. encerrando.", flush=True)
-        sys.exit(1)
-
-    print(f"[no{NODE_ID}] escutando em {uri}", flush=True)
-    daemon.requestLoop()
-
-
-if __name__ == "__main__":
-    main()

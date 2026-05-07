@@ -4,6 +4,6 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir pyro5 serpent msgpack
 
-COPY raft_node.py .
+COPY *.py ./
 
-CMD ["python", "-u", "raft_node.py"]
+CMD ["python", "-u", "run_node.py"]
