@@ -58,9 +58,9 @@ def send_command(command: str, retries: int = 5) -> bool:
 
 def print_status():
     print("\n-- status do cluster --")
-    # Fazemos um loop de 1 a 4 dinamicamente
+    # fazemos um loop de 1 a 4 dinamicamente
     for nid in range(1, 5):
-        # O prefixo PYRONAME avisa o Pyro5 para consultar o Name Server primeiro
+        # o prefixo PYRONAME avisa o Pyro5 para consultar o Name Server primeiro
         logical_uri = f"PYRONAME:raft.node.{nid}"
         
         try:

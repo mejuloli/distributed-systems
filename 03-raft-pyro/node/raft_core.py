@@ -388,4 +388,3 @@ class RaftNode:
                 "last_applied":     self.last_applied,
                 "applied_commands": list(self.applied_commands),
             }
-
