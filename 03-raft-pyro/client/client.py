@@ -3,21 +3,11 @@
 
 import Pyro5.api
 import os
-import sys
 import time
 import argparse
 
 NS_HOST = os.environ.get("NS_HOST", "nameserver")
 NS_PORT = int(os.environ.get("NS_PORT", 9090))
-
-# uris fixos dos nós (fallback caso a busca do lider no ns falhe)
-NODE_URIS = {
-    1: "PYRO:raft.node.1@node1:9091",
-    2: "PYRO:raft.node.2@node2:9092",
-    3: "PYRO:raft.node.3@node3:9093",
-    4: "PYRO:raft.node.4@node4:9094",
-}
-
 
 def get_leader_uri() -> str | None:
     # consulta o servidor de nomes para descobrir o lider atual
@@ -67,12 +57,16 @@ def send_command(command: str, retries: int = 5) -> bool:
 
 
 def print_status():
-    # exibe o estado atual de todos os nós
     print("\n-- status do cluster --")
-    for nid, uri in NODE_URIS.items():
+    # Fazemos um loop de 1 a 4 dinamicamente
+    for nid in range(1, 5):
+        # O prefixo PYRONAME avisa o Pyro5 para consultar o Name Server primeiro
+        logical_uri = f"PYRONAME:raft.node.{nid}"
+        
         try:
-            with Pyro5.api.Proxy(uri) as proxy:
+            with Pyro5.api.Proxy(logical_uri) as proxy:
                 s = proxy.get_status()
+                
             role = {"leader": "lider", "candidate": "candidato", "follower": "seguidor"}[s["state"]]
             print(
                 f"  no{s['node_id']}  "

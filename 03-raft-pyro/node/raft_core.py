@@ -5,11 +5,9 @@ import Pyro5.api
 import Pyro5.errors
 import threading
 import random
-import time
-import sys
 import logging
 from models import State, LogEntry
-from config import (NODE_ID, NODE_PORT, PEERS, NS_HOST, NS_PORT, OBJECT_ID, HEARTBEAT_INTERVAL, ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
+from config import (NODE_ID, PEERS, NS_HOST, NS_PORT, HEARTBEAT_INTERVAL, ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,7 +108,7 @@ class RaftNode:
         # registra (ou sobrescreve) a entrada 'raft.leader' no servidor de nomes
         try:
             ns  = Pyro5.api.locate_ns(host=NS_HOST, port=NS_PORT)
-            uri = f"PYRO:{OBJECT_ID}@node{NODE_ID}:{NODE_PORT}"
+            uri = PEERS[NODE_ID]
             ns.register("raft.leader", uri, safe=False)
             self.log.info(f"registrado como 'raft.leader' -> {uri}")
         except Exception as e:

@@ -28,8 +28,11 @@ depois, no vs code: `ctrl+shift+p` → `python: select interpreter` → escolha 
 03-raft-pyro/
 ├── docker-compose.yml
 ├── node/
+│   ├── config.py
 │   ├── Dockerfile
-│   └── raft_node.py
+│   ├── models.py
+│   ├── raft_core.py
+│   └── raft_run.py
 └── client/
     ├── Dockerfile
     └── client.py
@@ -75,35 +78,33 @@ raft> sair            # encerra o cliente
 
 ---
 
-## testar falha do lider (reeleicao)
+## engenharia de caos (testando resiliência)
 
-### terminal 1 — descobre qual e o lider atual
-
+o Raft é projetado para sobreviver a falhas. Para poder testar, primeiro deixe rodando o docker em paralelo pressionando `d` no console do `docker compose up` em seguida execute:
 ```bash
-docker compose logs | grep LIDER
+docker compose logs -f
 ```
+*dica: o comando logs -f reconecta automaticamente se um nó for reiniciado.*
 
-### terminal 2 — derruba o lider
+teste o cluster da seguinte forma:
 
+1. **derrube o líder:**
+descubra quem é o líder atual (via logs ou `status`) e pare o contêiner:
 ```bash
-docker stop node3   # substitua pelo no lider atual
+docker stop node3
 ```
+*observe os outros nós atingirem o timeout e elegerem um novo líder.*
 
-### terminal 3 — acompanha a nova eleicao
+2. **envie comandos sem o nó antigo:**
+o sistema continuará operando normalmente (quórum de 3 nós).
 
-```bash
-docker compose logs -f node1 node2 node4
-```
-
-voce vera um dos nos restantes virar candidato e ser eleito lider no proximo termo.
-
-### reintegrar o no derrubado
-
+3. **reintegre o nó:**
 ```bash
 docker start node3
 ```
 
-o no volta como seguidor e sincroniza o log automaticamente com o lider atual.
+
+*O nó voltará, perceberá que seu log está atrasado e usará a otimização de **Log Matching** para sincronizar em lote com o novo líder.*
 
 ---
 
@@ -112,6 +113,22 @@ o no volta como seguidor e sincroniza o log automaticamente com o lider atual.
 ```bash
 docker compose down
 ```
+
+---
+
+## conceitos operacionais
+
+### termo (term)
+
+o "tempo lógico" do sistema. Funciona como um número de mandato. Impede que líderes antigos (que ficaram isolados da rede) consigam enviar comandos obsoletos quando voltarem.
+
+### log
+
+o caderno de intenções de cada nó. O simples fato de um comando estar no log **não significa que ele foi executado**. Ele é apenas uma proposta pendente de confirmação.
+
+### confirmado (commit index)
+
+o "carimbo de aprovado". Uma entrada de log só é confirmada quando o líder recebe confirmação da maioria (quórum). Somente após o commit é que a Máquina de Estados executa o comando (ex: altera o valor de `x`).
 
 ---
 
@@ -141,6 +158,14 @@ PYRO:raft.node.4@node4:9094
 ```
 
 os hostnames fixos sao garantidos pelo docker compose, que atribui nomes de container deterministicos.
+
+---
+
+## configurações técnicas
+
+* **Election Timeout:** aleatório entre 1.5s e 3.0s (evita colisões de candidatos).
+* **Heartbeat:** 0.5s (enviado pelo líder para manter autoridade).
+* **Rede:** Docker Bridge (`raft-net`) com DNS interno para resolução de nomes dos nós.
 
 ---
 
