@@ -37,6 +37,18 @@ class ClientePromocao:
         #? cliente valida chave? acredito que não, mas por já que tem a assinatura vou validar mesmo assim
         if not verify_event(payload_to_bytes(payload), signature, producer):
             print(f"[MS Cliente] Assinatura INVÁLIDA ({producer}) - descartado.")
+        envelope = json.loads(body)
+        payload = envelope["payload"]
+        signature = envelope["signature"]
+
+        if rk == "promocao.destaque":
+            producer = "ranking"
+        else:  
+            producer = "notificacao" 
+
+        #? cliente valida chave? acredito que não, mas por já que tem a assinatura vou validar mesmo assim
+        if not verify_event(payload_to_bytes(payload), signature, producer):
+            print(f"[MS Cliente] Assinatura INVÁLIDA ({producer}) - descartado.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
 
@@ -102,6 +114,7 @@ def main():
         nome = input("Digite o nome do cliente: ").strip() or "Cliente_Custom"
         cats_input = input("Digite as categorias de interesse separadas por vírgula (ex: roupas, carros, livros): ")
         
+        # limpa e formata a lista de categorias
         # limpa e formata a lista de categorias
         categorias = [c.strip() for c in cats_input.split(",") if c.strip()]
         

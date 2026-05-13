@@ -15,9 +15,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from shared.rabbitmq_utils import (
     get_connection, declare_exchange, payload_to_bytes, 
     publish_event, EXCHANGE_NAME
+    publish_event, EXCHANGE_NAME
 )
 from shared.crypto_utils import sign_event, verify_event
+from shared.crypto_utils import sign_event, verify_event
 
+SERVICE_NAME = "notificacao"
 SERVICE_NAME = "notificacao"
 QUEUE_NAME = "Fila_Notificacao"
 
@@ -48,6 +51,7 @@ def _on_message(ch, method, props, body):
         notif = {
             "promocao_id":  pid,
             "titulo":       payload["titulo"],
+            "categoria":    categoria,
             "categoria":    categoria,
             "descricao":    payload["descricao"],
             "preco":        payload["preco"],
