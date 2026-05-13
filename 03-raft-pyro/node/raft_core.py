@@ -1,6 +1,3 @@
-# implementacao do nó raft usando pyro5
-# cada nó pode ser seguidor, candidato ou lider
-
 import Pyro5.api
 import Pyro5.errors
 import threading
@@ -15,25 +12,21 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
+# implementação do nodo do algoritmo Raft usando Pyro5 para comunicação remota
 @Pyro5.api.expose
 class RaftNode:
-    # implementação completa do raft exposta como objeto pyro5
-    # seções 5.1 a 5.4 do paper (ongaro & ousterhout, 2014)
-
     def __init__(self):
         self.node_id = NODE_ID
         self.log     = logging.getLogger(f"Node{NODE_ID}")
 
-        # estado persistente (simplificado: mantido em memoria)
+        # estado
         self.current_term = 0
         self.voted_for:   int | None = None
         self.log_entries: list[LogEntry] = []
+        self.commit_index = -1 
+        self.last_applied = -1 
 
-        # estado volatil
-        self.commit_index = -1   # maior indice de entrada confirmada
-        self.last_applied = -1   # maior indice aplicado a maquina de estados
-
-        # estado volatil do lider
+        # estado do lider
         self.next_index:  dict[int, int] = {}
         self.match_index: dict[int, int] = {}
 
@@ -42,7 +35,7 @@ class RaftNode:
         self.leader_id:      int | None = None
         self.votes_received: set[int] = set()
 
-        # comandos aplicados (maquina de estados simulada)
+        # comandos aplicados
         self.applied_commands: list[str] = []
 
         # sincronização
@@ -52,8 +45,6 @@ class RaftNode:
 
         self.log.info(f"no {NODE_ID} iniciado como seguidor (termo 0)")
         self._reset_election_timer()
-
-    # métodos auxiliares internos
 
     def _reset_election_timer(self):
         if self._election_timer:
@@ -105,7 +96,7 @@ class RaftNode:
         self._start_heartbeat_timer()
 
     def _register_as_leader(self):
-        # registra (ou sobrescreve) a entrada 'raft.leader' no servidor de nomes
+        # registra/sobrescreve a entrada 'raft.leader' no servidor de nomes
         try:
             ns  = Pyro5.api.locate_ns(host=NS_HOST, port=NS_PORT)
             uri = PEERS[NODE_ID]
@@ -125,13 +116,11 @@ class RaftNode:
     def _proxy(self, peer_id: int):
         return Pyro5.api.Proxy(PEERS[peer_id])
 
-    # eleição de líder  §5.2
-
     def _start_election(self):
         with self._lock:
             if self.state == State.LEADER:
                 return
-
+            
             self.current_term  += 1
             self.state          = State.CANDIDATE
             self.voted_for      = self.node_id
@@ -177,14 +166,9 @@ class RaftNode:
                         self._become_leader()
 
         except Pyro5.errors.CommunicationError as e:
-            # nó caiu ou rede falhou
-            # comportamento esperado em sistemas distribuídos
             self.log.warning(f"request_vote Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
-            # Erros de código interno (TypeErrors, KeyErrors, etc)
             self.log.error(f"request_vote Falha critica ao se comunicar com {peer_id}: {e}")
-
-    # replicação de log  §5.3
 
     def _send_heartbeats(self):
         if self.state != State.LEADER:
@@ -196,7 +180,7 @@ class RaftNode:
                     args=(peer_id,),
                     daemon=True,
                 ).start()
-        self._start_heartbeat_timer()   # reagenda
+        self._start_heartbeat_timer()
 
     def _send_append_entries(self, peer_id: int):
         with self._lock:
@@ -216,31 +200,29 @@ class RaftNode:
                 )
 
             with self._lock:
+                # se o termo do seguidor for maior, o líder deve se tornar seguidor imediatamente
                 if result["term"] > self.current_term:
                     self._become_follower(result["term"])
                     return
 
                 if result["success"]:
+                    # atualiza os índices de controle do líder
                     new_match = prev_index + len(entries)
                     self.match_index[peer_id] = new_match
                     self.next_index[peer_id]  = new_match + 1
                     self._advance_commit_index()
                 else:
-                    # otimização: recua o índice de uma vez usando o tamanho do log do seguidor
-                    # o get previne quebras caso fale com um nó desatualizado que não mandou log_len
+                    # falha de consistência, pega o último índice do nodo e envia o restante
                     follower_log_len = result.get("log_len", max(0, ni - 1))
                     self.next_index[peer_id] = min(max(0, ni - 1), follower_log_len)
 
         except Pyro5.errors.CommunicationError as e:
-            # nó caiu ou rede falhou
-            # comportamento esperado em sistemas distribuídos
             self.log.warning(f"append_entries Rede indisponivel para no {peer_id} (Timeout/Queda)")
         except Exception as e:
-            # erros de código interno (TypeErrors, KeyErrors, etc)
             self.log.error(f"append_entries Falha critica ao se comunicar com {peer_id}: {e}")
 
     def _advance_commit_index(self):
-        # confirma entradas replicadas na maioria dos servidores  §5.3
+        # confirma entradas replicadas na maioria dos servidores
         majority = (len(PEERS) // 2) + 1
         last     = len(self.log_entries) - 1
 
@@ -263,8 +245,6 @@ class RaftNode:
             self.applied_commands.append(cmd)
             self.log.info(f"aplicado [{self.last_applied}] {cmd!r}")
 
-    # rpc pyro5 - request_vote  §5.2
-
     def request_vote(
         self,
         term: int,
@@ -273,15 +253,17 @@ class RaftNode:
         last_log_term: int,
     ) -> dict:
         with self._lock:
+            # se o termo do candidato for maior, o seguidor deve aceitar o candidato e se tornar seguidor imediatamente
             if term > self.current_term:
                 self._become_follower(term)
 
             vote_granted = False
 
             if term < self.current_term:
-                pass  # termo obsoleto, nega o voto
+                # voto negado por termo desatualizado
+                pass 
             elif self.voted_for in (None, candidate_id):
-                # o log do candidato deve ser atualizado o máximo possível §5.4
+                # o log do candidato deve ser atualizado o máximo possível
                 my_last_term  = self._last_log_term()
                 my_last_index = self._last_log_index()
 
@@ -297,8 +279,6 @@ class RaftNode:
 
             return {"term": self.current_term, "vote_granted": vote_granted}
 
-    # rpc pyro5 - append_entries  §5.3
-
     def append_entries(
         self,
         term: int,
@@ -309,9 +289,11 @@ class RaftNode:
         leader_commit: int,
     ) -> dict:
         with self._lock:
+            # se o termo do líder for maior, o seguidor deve aceitar o líder e se tornar seguidor imediatamente
             if term > self.current_term:
                 self._become_follower(term)
 
+            # se o termo do líder for menor, rejeita a mensagem
             if term < self.current_term:
                 return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
 
@@ -320,12 +302,12 @@ class RaftNode:
             self.leader_id = leader_id
             self._reset_election_timer()
 
-            # verificação de consistência  §5.3
+            # verificação de consistência
             if prev_log_index >= 0:
                 if len(self.log_entries) <= prev_log_index:
                     return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
                 if self.log_entries[prev_log_index].term != prev_log_term:
-                    # remove entrada conflitante e todas as seguintes  §5.3
+                    # remove entrada conflitante e todas as seguintes
                     self.log_entries = self.log_entries[:prev_log_index]
                     return {"term": self.current_term, "success": False, "log_len": len(self.log_entries)}
 
@@ -339,20 +321,18 @@ class RaftNode:
                 else:
                     self.log_entries.append(LogEntry.from_dict(ed))
 
-            # avanca o índice de commit  §5.3
+            # avanca o índice de commit
             if leader_commit > self.commit_index:
                 self.commit_index = min(leader_commit, len(self.log_entries) - 1)
                 self._apply_committed()
 
             return {"term": self.current_term, "success": True}
 
-    # rpc pyro5 - interface com o cliente
-
     def submit_command(self, command: str) -> dict:
         # recebe um comando do cliente. apenas o líder aceita.
-        # retorna o uri do líder caso o nó não seja o líder
         with self._lock:
             if self.state != State.LEADER:
+                # se não for líder, retorna o URI do líder para o cliente redirecionar a requisição
                 leader_uri = PEERS.get(self.leader_id) if self.leader_id else None
                 return {
                     "success": False,
@@ -364,7 +344,7 @@ class RaftNode:
             idx = len(self.log_entries) - 1
             self.log.info(f"entrada adicionada [{idx}] {command!r} (termo {self.current_term})")
 
-        # replica imediatamente (o heartbeat tambem garante a replicação)
+        # replica imediatamente
         for peer_id in PEERS:
             if peer_id != self.node_id:
                 threading.Thread(
@@ -376,7 +356,7 @@ class RaftNode:
         return {"success": True, "index": idx}
 
     def get_status(self) -> dict:
-        # retorna o estado atual do nó (para depuração)
+        # retorna o estado atual do nó
         with self._lock:
             return {
                 "node_id":          self.node_id,

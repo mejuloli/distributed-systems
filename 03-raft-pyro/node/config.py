@@ -1,10 +1,10 @@
 import os
 
-# configurações do nó (falha rápida se não existirem)
+# configurações do nó
 NODE_ID   = int(os.environ["NODE_ID"])          # 1, 2, 3 ou 4
 NODE_PORT = int(os.environ["NODE_PORT"])        # 9091 a 9094
 
-# configurações do Name Server (usa fallback/default se não existir)
+# configurações do Name Serve
 NS_HOST   = os.environ.get("NS_HOST", "nameserver")
 NS_PORT   = int(os.environ.get("NS_PORT", 9090))
 

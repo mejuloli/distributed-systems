@@ -1,5 +1,3 @@
-# cliente raft: descobre o lider via servidor de nomes pyro5
-# e envia comandos de forma interativa ou automatica
 
 import Pyro5.api
 import os
@@ -24,7 +22,7 @@ def send_command(command: str, retries: int = 5) -> bool:
     # se redirecionado, segue o redirecionamento automaticamente
     leader_uri = get_leader_uri()
 
-    for attempt in range(retries):
+    for _ in range(retries):
         if not leader_uri:
             print("aguardando lider ser eleito...")
             time.sleep(2)
@@ -58,11 +56,9 @@ def send_command(command: str, retries: int = 5) -> bool:
 
 def print_status():
     print("\n-- status do cluster --")
-    # fazemos um loop de 1 a 4 dinamicamente
     for nid in range(1, 5):
-        # o prefixo PYRONAME avisa o Pyro5 para consultar o Name Server primeiro
+        # usamos PYRONAME para o proxy resolver o URI do nó, que deve estar registrado no servidor de nomes
         logical_uri = f"PYRONAME:raft.node.{nid}"
-        
         try:
             with Pyro5.api.Proxy(logical_uri) as proxy:
                 s = proxy.get_status()
@@ -91,7 +87,7 @@ def demo_mode():
         "PING",
     ]
     print("modo demo - enviando comandos automaticamente\n")
-    time.sleep(4)   # aguarda o cluster eleger um lider
+    time.sleep(4)
 
     for cmd in commands:
         print(f"> {cmd}")
@@ -102,7 +98,6 @@ def demo_mode():
 
 
 def interactive_mode():
-    # repl simples para testes manuais
     print("cliente raft - digite um comando, 'status' ou 'sair'")
     while True:
         try:

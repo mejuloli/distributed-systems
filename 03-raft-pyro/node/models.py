@@ -1,8 +1,10 @@
+# statos possíveis de um nó Raft
 class State:
     FOLLOWER  = "follower"
     CANDIDATE = "candidate"
     LEADER    = "leader"
 
+# entrada de log do Raft
 class LogEntry:
     def __init__(self, term: int, command: str):
         self.term    = term

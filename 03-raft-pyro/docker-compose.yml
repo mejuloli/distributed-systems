@@ -1,16 +1,14 @@
 version: "3.9"
 
-# ──────────────────────────────────────────────────────────────────────────────
 #  Raft + Pyro5 cluster
 #  Serviços:
 #    nameserver  – Pyro5 name server (porta 9090)
 #    node1..4    – nós Raft (portas 9091-9094)
 #    client      – cliente de demonstração
-# ──────────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── Pyro5 Name Server ───────────────────────────────────────────────────────
+  # Pyro5 Name Server 
   nameserver:
     image: python:3.11-slim
     container_name: nameserver
@@ -29,7 +27,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Raft Node 1 ─────────────────────────────────────────────────────────────
+  # Raft Node 1 
   node1:
     build:
       context: ./node
@@ -48,7 +46,7 @@ services:
       nameserver:
         condition: service_healthy
 
-  # ── Raft Node 2 ─────────────────────────────────────────────────────────────
+  # Raft Node 2 
   node2:
     build:
       context: ./node
@@ -67,7 +65,7 @@ services:
       nameserver:
         condition: service_healthy
 
-  # ── Raft Node 3 ─────────────────────────────────────────────────────────────
+  # Raft Node 3 
   node3:
     build:
       context: ./node
@@ -87,7 +85,7 @@ services:
       nameserver:
         condition: service_healthy
 
-  # ── Raft Node 4 ─────────────────────────────────────────────────────────────
+  # Raft Node 4 
   node4:
     build:
       context: ./node
@@ -106,7 +104,7 @@ services:
       nameserver:
         condition: service_healthy
 
-  # ── Client ──────────────────────────────────────────────────────────────────
+  # Client
   client:
     build:
       context: ./client

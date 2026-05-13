@@ -5,10 +5,7 @@ import time
 from raft_core import RaftNode
 from config import NODE_ID, NODE_PORT, NS_HOST, NS_PORT, OBJECT_ID
 
-# ponto de entrada
-
 def main():
-    # aguarda o servidor de nomes subir
     time.sleep(3)
 
     daemon = Pyro5.server.Daemon(host=f"node{NODE_ID}", port=NODE_PORT)
@@ -19,6 +16,7 @@ def main():
     connected = False
     for attempt in range(10):
         try:
+            # registramos no servidor de nomes para que os clientes possam nos encontrar para o status
             ns = Pyro5.api.locate_ns(host=NS_HOST, port=NS_PORT)
             ns.register(OBJECT_ID, uri)
             print(f"[no{NODE_ID}] registrado: {uri}", flush=True)
