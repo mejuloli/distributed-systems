@@ -23,3 +23,5 @@ PEERS: dict[int, str] = {
 HEARTBEAT_INTERVAL      = 0.5
 ELECTION_TIMEOUT_MIN    = 1.5
 ELECTION_TIMEOUT_MAX    = 3.0
+COMMAND_TIMEOUT         = 5.0
+RPC_TIMEOUT             = 0.2
