@@ -1,18 +1,18 @@
-# raft com pyro5
+# Raft com Pyro5
 
-implementacao do algoritmo de consenso raft para replicacao de log entre 4 processos comunicando via pyro5.
+Implementação do algoritmo de consenso Raft para replicacao de log entre 4 processos comunicando via Pyro5.
 
-## dependencias
+## Dependências
 
-- docker
-- docker compose
+- Docker
+- Docker compose
 
-> nao e necessario instalar python ou pyro5 localmente para rodar o projeto.
-> as dependencias ficam todas dentro dos containers.
+> Não é necessário instalar python ou Pyro5 localmente para rodar o projeto.
+> As dependencias ficam todas dentro dos containers.
 
 ---
 
-## estrutura
+## Estrutura
 
 ```
 03-raft-pyro/
@@ -30,33 +30,33 @@ implementacao do algoritmo de consenso raft para replicacao de log entre 4 proce
 
 ---
 
-## como rodar
+## Como rodar
 
-### terminal 1 — sobe o cluster
+### Terminal 1 — sobe o Cluster
 
 ```bash
 docker compose up --build
 ```
 
-isso inicializa:
-- 1 servidor de nomes pyro5 (nameserver)
-- 4 nos raft (node1 a node4)
+Isso inicializará:
+- 1 servidor de nomes Pyro5 (nameserver)
+- 4 nos Raft (node1 a node4)
 - 1 cliente em modo demo (envia comandos automaticamente)
 
-aguarde os nos se registrarem e um lider ser eleito. voce vera mensagens como:
+Aguarde os nós se registrarem e um líder ser eleito. Você verá mensagens como:
 
 ```
 node3 | LIDER   termo=1
-node1 | voto concedido ao no 3 (termo 1)
+node1 | voto concedido ao nó 3 (termo 1)
 ```
 
-### terminal 2 — cliente interativo
+### Terminal 2 — cliente interativo
 
 ```bash
 docker compose run --rm client python client.py
 ```
 
-comandos disponiveis no prompt `raft>`:
+Comandos disponiveis no prompt `raft>`:
 
 ```
 raft> status          # exibe estado de todos os nos
@@ -68,25 +68,25 @@ raft> sair            # encerra o cliente
 
 ---
 
-## engenharia de caos (testando resiliência)
+## Engenharia de caos (testando resiliência)
 
-para poder testar o comportamento quando nodos caem, primeiro deixe rodando o docker em paralelo pressionando `d` no console do `docker compose up` em seguida execute:
+Para poder testar o comportamento quando nodos caem, primeiro deixe rodando o docker em paralelo pressionando `d` no console do `docker compose up` e em seguida execute:
 ```bash
 docker compose logs -f
 ```
-*dessa forma o log irá capturar os nodos reiniciados*
+*Dessa forma o log irá capturar os nodos reiniciados*
 
-1. **derrube o líder:**
-descubra quem é o líder atual (via logs ou `status`) e pare o serviço do contêiner:
+1. **Derrube o líder:**
+Descubra quem é o líder atual (via logs ou `status`) e pare o serviço do contêiner:
 ```bash
 docker stop node3
 ```
-*observe os outros nós atingirem o timeout e elegerem um novo líder.*
+*Observe os outros nós atingirem o timeout e elegerem um novo líder.*
 
-2. **envie comandos sem o nó antigo:**
+2. **Envie comandos sem o nó antigo:**
 o sistema continuará operando normalmente (quórum de 3 nós).
 
-3. **reintegre o nó:**
+3. **Reintegre o nó:**
 ```bash
 docker start node3
 ```
@@ -94,7 +94,7 @@ docker start node3
 
 ---
 
-## encerrar tudo
+## Encerrar tudo
 
 ```bash
 docker compose down
@@ -102,23 +102,23 @@ docker compose down
 
 ---
 
-## como funciona
+## Como funciona
 
-### eleicao
+### Eleição
 
-- cada no usa um timeout aleatorio
-- ao expirar o timeout sem receber heartbeat, o no vira candidato e solicita votos
-- um candidato so vence se seu log estiver tao atualizado quanto o do votante
-- o lider eleito se registra no servidor de nomes como `raft.leader`
+- Cada nó usa um timeout aleatorio
+- Ao expirar o timeout sem receber heartbeat, o nó vira candidato e solicita votos
+- Um candidato só vence se seu log estiver tão atualizado quanto o do votante
+- O líder eleito se registra no servidor de nomes como `raft.leader`
 
-### replicacao
+### Reaplicação
 
-- o cliente descobre o lider consultando o servidor de nomes
-- o lider recebe o comando, anexa ao seu log e envia `AppendEntries` aos seguidores
-- a entrada e confirmada (committed) quando a maioria dos nos confirma
-- o lider envia heartbeats periodicos para evitar novas eleicoes
+- O cliente descobre o lídder consultando o servidor de nomes
+- O líder recebe o comando, anexa ao seu log e envia `AppendEntries` aos seguidores
+- A entrada é confirmada (committed) quando a maioria dos nós confirma
+- O líder envia heartbeats periódicos para evitar novas eleições
 
-### uris fixos dos nos
+### URIs fixos dos nós
 
 ```
 PYRO:raft.node.1@node1:9091
@@ -127,4 +127,4 @@ PYRO:raft.node.3@node3:9093
 PYRO:raft.node.4@node4:9094
 ```
 
-os hostnames fixos sao garantidos pelo docker compose, que atribui nomes de container deterministicos.
+Os hostnames fixos são garantidos pelo docker compose, que atribui nomes de container determinísticos.
