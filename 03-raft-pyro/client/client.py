@@ -33,6 +33,7 @@ def send_command(command: str, retries: int = 5) -> bool:
 
         try:
             with Pyro5.api.Proxy(leader_uri) as proxy:
+                proxy._pyroTimeout = 6
                 result = proxy.submit_command(command)
 
             if result["success"]:
@@ -65,6 +66,7 @@ def print_status():
         
         try:
             with Pyro5.api.Proxy(logical_uri) as proxy:
+                proxy._pyroTimeout = 0.2
                 s = proxy.get_status()
                 
             role = {"leader": "lider", "candidate": "candidato", "follower": "seguidor"}[s["state"]]

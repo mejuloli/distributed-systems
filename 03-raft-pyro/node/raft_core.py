@@ -6,8 +6,9 @@ import Pyro5.errors
 import threading
 import random
 import logging
+import time
 from models import State, LogEntry
-from config import (NODE_ID, PEERS, NS_HOST, NS_PORT, HEARTBEAT_INTERVAL, ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
+from config import (COMMAND_TIMEOUT, NODE_ID, PEERS, NS_HOST, NS_PORT, HEARTBEAT_INTERVAL, ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX, RPC_TIMEOUT)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -157,6 +158,7 @@ class RaftNode:
                     last_log_index = self._last_log_index()
                     last_log_term  = self._last_log_term()
 
+                proxy._pyroTimeout = RPC_TIMEOUT
                 result = proxy.request_vote(
                     term, self.node_id, last_log_index, last_log_term
                 )
@@ -211,6 +213,7 @@ class RaftNode:
 
         try:
             with self._proxy(peer_id) as proxy:
+                proxy._pyroTimeout = RPC_TIMEOUT
                 result = proxy.append_entries(
                     term, self.node_id, prev_index, prev_term, entries, commit
                 )
@@ -373,7 +376,22 @@ class RaftNode:
                     daemon=True,
                 ).start()
 
-        return {"success": True, "index": idx}
+        # espera até que a entrada seja confirmada (replicada na maioria dos nós)
+        start_time = time.time()
+        while True:
+            with self._lock:
+                if self.state != State.LEADER:
+                    return {"success": False, "error": "lost_leadership"}
+                if self.commit_index >= idx:
+                    return {"success": True, "index": idx}
+            
+            if time.time() - start_time > COMMAND_TIMEOUT:
+                return {
+                    "success": False, 
+                    "error": "timeout", 
+                    "message": "quórum não alcançado (nós insuficientes)"
+                }
+            time.sleep(0.3)
 
     def get_status(self) -> dict:
         # retorna o estado atual do nó (para depuração)
