@@ -24,7 +24,7 @@ from shared.crypto_utils import sign_event, verify_event
 
 SERVICE_NAME = "ranking"
 QUEUE_NAME = "Fila_Ranking"
-HOT_DEAL_SCORE = 5
+HOT_DEAL_SCORE = int(os.getenv("HOT_DEAL_SCORE", "5"))
 
 # scores: { promocao_id: { "positivo": N, "negativo": N, "hot_deal": bool } }
 scores: dict[str, dict] = {}
@@ -69,6 +69,8 @@ def _on_voto(ch, method, props, body):
         scores[pid]["hot_deal"] = True
         hot_payload = {
             "promocao_id": pid,
+            "loja_id"  :   payload.get("loja_id"),
+            "loja_email":  payload.get("loja_email"),
             "titulo"   :   payload.get("titulo", "?"),
             "categoria":   payload.get("categoria", "?"),
             "descricao":   payload.get("descricao", ""),

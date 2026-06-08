@@ -3,12 +3,12 @@ MS Promoção
 ───────────
 Gerencia e valida promoções recebidas.
 
-Consome : promocao.recebida  (assinada com chave do MS Gateway)
+Consome : promocao.recebida  (assinada com chave da loja)
 Publica : promocao.publicada (assinada com chave do MS Promoção)
 
 Fluxo:
   1. Recebe evento promocao.recebida
-  2. Valida assinatura digital do Gateway
+  2. Valida assinatura digital da loja demo
   3. Assina e publica promocao.publicada
 """
 import sys
@@ -34,19 +34,34 @@ def _on_promocao_recebida(ch, method, props, body):
 
     print(f"\n[MS Promoção] Evento '{routing_key}' recebido: '{payload.get('titulo', '?')}'")
 
-    # 1. valida assinatura do Gateway
-    if not verify_event(payload_to_bytes(payload), signature, "gateway"):
+    # 1. valida assinatura da loja
+    if not verify_event(payload_to_bytes(payload), signature, "loja_demo"):
         print("[MS Promoção] Assinatura INVÁLIDA - evento descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
 
     print("[MS Promoção] ✔ Assinatura válida.")
 
-    #* validação super hiper mega complexa e complicada, para validar todos os dados do vendedor e do produto
-    if (False):
-        print("[MS Promoção] Dados inválidos - evento descartado.")
+    required = ["promocao_id", "loja_id", "loja_email", "titulo", "categoria", "descricao", "preco"]
+    if any(not payload.get(field) for field in required):
+        print("[MS Promoção] Dados obrigatórios ausentes - evento descartado.")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         return
+
+    try:
+        payload["preco"] = float(payload["preco"])
+    except (TypeError, ValueError):
+        print("[MS Promoção] Preço inválido - evento descartado.")
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        return
+
+    if payload["preco"] <= 0:
+        print("[MS Promoção] Preço deve ser maior que zero - evento descartado.")
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        return
+
+    payload["categoria"] = payload["categoria"].strip().lower()
+    payload["hot_deal"] = False
 
     print(f"[MS Promoção] Promoção registrada (id={payload['promocao_id']}).")
 

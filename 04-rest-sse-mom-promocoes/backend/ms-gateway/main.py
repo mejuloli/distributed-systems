@@ -35,6 +35,7 @@ CORS(app)
 promocoes: dict[str, dict] = {}
 interesses: dict[str, set[str]] = {}
 sse_clients: dict[str, list[queue.Queue]] = {}
+hotdeals_notificados: set[str] = set()
 lock = threading.RLock()
 
 
@@ -268,12 +269,14 @@ def atualizar_promocao_publicada(payload: dict):
         promocoes[promocao["promocao_id"]] = {**existente, **promocao}
 
 
-def marcar_hotdeal(payload: dict):
+def marcar_hotdeal(payload: dict) -> bool:
     promocao_id = payload.get("promocao_id")
     if not promocao_id:
-        return
+        return False
 
     with lock:
+        novo_hotdeal = promocao_id not in hotdeals_notificados
+        hotdeals_notificados.add(promocao_id)
         atual = promocoes.get(promocao_id, {})
         promocoes[promocao_id] = {
             **atual,
@@ -281,6 +284,7 @@ def marcar_hotdeal(payload: dict):
             "categoria": normalizar_categoria(payload.get("categoria", atual.get("categoria", ""))),
             "hot_deal": True,
         }
+        return novo_hotdeal
 
 
 def evento_sse(tipo: str, payload: dict) -> dict:
@@ -329,9 +333,9 @@ def on_evento(ch, method, props, body):
             print(f"[MS Gateway] SSE categoria enviado: {payload.get('categoria')}")
 
         else:
-            marcar_hotdeal(payload)
-            enviar_sse_para_todos(evento_sse("hotdeal", payload))
-            print(f"[MS Gateway] SSE hot deal enviado: {payload.get('titulo')}")
+            if marcar_hotdeal(payload):
+                enviar_sse_para_todos(evento_sse("hotdeal", payload))
+                print(f"[MS Gateway] SSE hot deal enviado: {payload.get('titulo')}")
 
     except Exception as exc:
         print(f"[MS Gateway] Erro ao processar evento: {exc}")
