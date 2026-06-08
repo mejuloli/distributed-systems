@@ -43,7 +43,7 @@ Acesse:
 - Gateway/API: http://localhost:5000
 - RabbitMQ Management: http://localhost:15673 (`guest` / `guest`)
 
-O serviço `keygen` gera automaticamente as chaves RSA em um volume Docker compartilhado antes dos microsserviços iniciarem.
+O serviço `keygen` gera automaticamente as chaves RSA em `backend/keys/generated` antes dos microsserviços iniciarem. Os arquivos `.pem` ficam disponíveis para inspeção local, mas são ignorados pelo Git.
 
 ## E-mail
 

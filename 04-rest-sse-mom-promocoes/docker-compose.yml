@@ -23,7 +23,7 @@ services:
     environment:
       KEYS_DIR: /app/generated-keys
     volumes:
-      - keys_data:/app/generated-keys
+      - ./backend/keys/generated:/app/generated-keys
 
   ms-gateway:
     build:
@@ -39,7 +39,7 @@ services:
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
     volumes:
-      - keys_data:/app/generated-keys:ro
+      - ./backend/keys/generated:/app/generated-keys:ro
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -57,7 +57,7 @@ services:
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
     volumes:
-      - keys_data:/app/generated-keys:ro
+      - ./backend/keys/generated:/app/generated-keys:ro
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -76,7 +76,7 @@ services:
       RABBITMQ_USER: guest
       RABBITMQ_PASS: guest
     volumes:
-      - keys_data:/app/generated-keys:ro
+      - ./backend/keys/generated:/app/generated-keys:ro
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -97,7 +97,7 @@ services:
       RESEND_FROM_EMAIL: "${RESEND_FROM_EMAIL:-Sistema de Promoções <onboarding@resend.dev>}"
       RESEND_TO_OVERRIDE: ${RESEND_TO_OVERRIDE:-}
     volumes:
-      - keys_data:/app/generated-keys:ro
+      - ./backend/keys/generated:/app/generated-keys:ro
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -112,7 +112,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:5000
     volumes:
-      - keys_data:/app/public/keys:ro
+      - ./backend/keys/generated:/app/public/keys:ro
     depends_on:
       keygen:
         condition: service_completed_successfully
@@ -121,4 +121,3 @@ services:
 
 volumes:
   rabbitmq_data:
-  keys_data:

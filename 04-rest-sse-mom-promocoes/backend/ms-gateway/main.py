@@ -147,12 +147,6 @@ def cadastrar_promocao():
     if erro:
         return resposta_erro(erro, 400)
 
-    payload = {
-        **payload,
-        "categoria": normalizar_categoria(payload["categoria"]),
-        "preco": float(payload["preco"]),
-    }
-
     publish_event("promocao.recebida", payload, assinatura)
     return jsonify({"mensagem": "Promoção recebida e enviada para validação."}), 202
 
