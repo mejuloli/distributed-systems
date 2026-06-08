@@ -1,29 +1,13 @@
-export const LOJA_DEMO_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
-MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDNNb3/A8jddfAj
-VyiIKVC25TvsUpDmThIWr3zoInb4F5yDMOUjeRR6Enk5XqRer00ngayS5C3LuOyL
-FTR3Y0a/1SlCESSAU+RGktgO0U4q3BHbr/qg2rolDoW6R8bvoFAdojvCodSdsCD0
-kPOw40fUYeJpXtMbJxOcFhryExnnUnRTIyflbPtL8Fu1p4hLBJxwHMKRv/Lbpv77
-ws3i1UNuLUK5zjIEmVtrTdEZ2BHlXLMq+4Yii4LX2LCRYvYgGvBJa7FbS3IEjCan
-tGzw6qVaRUc6hPK7inz5sNYciWP25rQ2wmfTHRgpq8jwOInNXsMiVSmFidNibWbp
-PMccWUyTAgMBAAECggEASWRyKlWhLkty8kDG10PngTIlJ1U0S5oacBCdXKyO3hYb
-vPPsz64LO8mFn5YQtWh+8KU5ImQHWPgvaWLRG+3erNdA5UcaRec7Gl6EdXA4Q63n
-mSmsOoFf18cE3uWy6ZrtbFvMgcS9NRR8BNweu+Hdm8DSaBso52onYkippHBecFNx
-XZYlbZxMlfBbbMnrcUkm5+jRO1s+kIBi61QI/MEdFyrErMao58Q1HfWWSWRoqEQk
-krnSBCJEopJAm+uf/FNPc2wv+eaQONQ40F44c6IxihBnMsxvc+gepYpZc3bExDpl
-S1FYO5Ti3cKOjCq+SnLlZY5W81+qjmwHmAL70/NXmQKBgQD8fJpvJETLQQHlPH7W
-6xcgPE9atqLNtFhBdW5/Ci4Xn0aw891ivUhnNtMUQGYngnLqfgtppKTxFGYkaYJo
-9mE5UrDHnwEnookwAD/KEpWjXuiw5L18NIPMDXKV2Nz4xwh2+TY/YvaykhQKD59W
-OXV7W3BQzQC6oYknM3kGmKZRzQKBgQDQELtNGW5p7TEM0ASBgGGa/Z8bHcPyP8Bg
-+Z9DEyDMwx4OA/wVqn9UcpL1vf2QNQ3WzJBLsnFx2epIdaOWBXB/C9XXnXDPnZuf
-rRGyMY+zVHmBeM9Vwf+eWSg16ZCb3cFHhWg1L1DeE4ULOZOX8Ak3yEBKaSXfEtf4
-72pYtnk33wKBgQDKTJP4hRjRug5ou+XtEYQAAhKa3kbnhp5IJG0aQO/ZYXbkhSBW
-4s5GVLkfOtIeyfiFReSjCpZVy0Bj4F3q963CniyiZRYpyaMd4LU7lVRsB7ltMnlY
-MUOAlS3APngepGp12QvMEeEUBtMjlIzYK0WkRwlg1EDHSHJ6BFXuIRTx6QKBgEHX
-eZ4dVR56K9J1JWfhu4Fzjtzi33YSjItjku2D6RZDDIi85BHrIV4U38KaO9pdn6KA
-m40Iy/OOVSBW8cxwrjfWA/a2YNOieXPfLcFpA6NpMQYyt9HYkU6HwjzFS7i3RQmg
-AukJrxqHrMtvjfA/ynr3iLjDa3ObH/MruEiYfeWbAoGBALxgmAtYsohtTgJ/kx1H
-h6LlIgceJcN6hrSa0RwT5krXT0K7GEJURm7W4Eu/SxyqSFYsfBKe3UJ+popZwuir
-M4VkyYmmudK3qF2pUD1NqFscZZCebjySUOrEAV9osKosIEDVQkpYdILlnUzRs9w2
-GRmttSgvMs0Y0364g1i/JbTX
------END PRIVATE KEY-----
-`;
+let chaveCache = null;
+
+export async function carregarLojaDemoPrivateKey() {
+  if (chaveCache) return chaveCache;
+
+  const resposta = await fetch('/keys/loja_demo_private.pem');
+  if (!resposta.ok) {
+    throw new Error('Chave da loja demo não encontrada. Inicie o projeto com Docker para gerar as chaves.');
+  }
+
+  chaveCache = await resposta.text();
+  return chaveCache;
+}

@@ -1,0 +1,124 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: promocoes-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  keygen:
+    build:
+      context: ./backend
+    command: ["python", "keys/generate_keys.py"]
+    environment:
+      KEYS_DIR: /app/generated-keys
+    volumes:
+      - keys_data:/app/generated-keys
+
+  ms-gateway:
+    build:
+      context: ./backend
+    command: ["python", "ms-gateway/main.py"]
+    ports:
+      - "5000:5000"
+    environment:
+      GATEWAY_PORT: 5000
+      KEYS_DIR: /app/generated-keys
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    volumes:
+      - keys_data:/app/generated-keys:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keygen:
+        condition: service_completed_successfully
+
+  ms-promocao:
+    build:
+      context: ./backend
+    command: ["python", "ms-promocao/main.py"]
+    environment:
+      KEYS_DIR: /app/generated-keys
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    volumes:
+      - keys_data:/app/generated-keys:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keygen:
+        condition: service_completed_successfully
+
+  ms-ranking:
+    build:
+      context: ./backend
+    command: ["python", "ms-ranking/main.py"]
+    environment:
+      HOT_DEAL_SCORE: 5
+      KEYS_DIR: /app/generated-keys
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    volumes:
+      - keys_data:/app/generated-keys:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keygen:
+        condition: service_completed_successfully
+
+  ms-notificacao:
+    build:
+      context: ./backend
+    command: ["python", "ms-notificacao/main.py"]
+    environment:
+      KEYS_DIR: /app/generated-keys
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: "${RESEND_FROM_EMAIL:-Sistema de Promoções <onboarding@resend.dev>}"
+      RESEND_TO_OVERRIDE: ${RESEND_TO_OVERRIDE:-}
+    volumes:
+      - keys_data:/app/generated-keys:ro
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      keygen:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000
+    volumes:
+      - keys_data:/app/public/keys:ro
+    depends_on:
+      keygen:
+        condition: service_completed_successfully
+      ms-gateway:
+        condition: service_started
+
+volumes:
+  rabbitmq_data:
+  keys_data:

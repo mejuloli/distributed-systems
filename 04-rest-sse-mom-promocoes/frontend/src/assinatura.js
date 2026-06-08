@@ -1,4 +1,4 @@
-import { LOJA_DEMO_PRIVATE_KEY } from './lojaDemoKey';
+import { carregarLojaDemoPrivateKey } from './lojaDemoKey';
 
 function ordenar(valor) {
   if (Array.isArray(valor)) return valor.map(ordenar);
@@ -42,9 +42,11 @@ function bufferParaBase64(buffer) {
 }
 
 async function importarChave() {
+  const chavePrivada = await carregarLojaDemoPrivateKey();
+
   return crypto.subtle.importKey(
     'pkcs8',
-    pemParaBuffer(LOJA_DEMO_PRIVATE_KEY),
+    pemParaBuffer(chavePrivada),
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false,
     ['sign'],
