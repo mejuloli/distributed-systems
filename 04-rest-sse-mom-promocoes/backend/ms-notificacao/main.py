@@ -91,7 +91,6 @@ def on_message(ch, method, props, body):
         producer = "promocao" if routing_key == "promocao.publicada" else "ranking"
         if not verify_event(payload_to_bytes(payload), signature, producer):
             print(f"[MS Notificação] Assinatura inválida ({producer}) - descartado.")
-            ch.basic_ack(delivery_tag=method.delivery_tag)
             return
 
         titulo = payload.get("titulo", "promoção")

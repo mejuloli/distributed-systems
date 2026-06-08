@@ -321,7 +321,6 @@ def on_evento(ch, method, props, body):
 
         if not produtor or not verify_event(payload_to_bytes(payload), assinatura, produtor):
             print(f"[MS Gateway] Assinatura inválida em '{routing_key}'. Evento descartado.")
-            ch.basic_ack(delivery_tag=method.delivery_tag)
             return
 
         if routing_key == "promocao.publicada":
