@@ -54,10 +54,11 @@ Para envio real com Resend:
 ```bash
 RESEND_API_KEY=... \
 RESEND_FROM_EMAIL='Sistema de Promoções <onboarding@resend.dev>' \
+RESEND_TO_OVERRIDE=... \
 docker compose up --build
 ```
 
-Opcionalmente, use `RESEND_TO_OVERRIDE=email@destino.com` durante testes para redirecionar todos os envios.
+Como usamos o Resend Free Tier, use o `RESEND_TO_OVERRIDE=email@destino.com` para forçar o envio do e-mail para o e-mail dono da API utilizada. Caso contrário o Resend irá bloquar o envio do e-mail
 
 ## Endpoints Principais
 
