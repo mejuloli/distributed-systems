@@ -12,6 +12,7 @@ const categoriasSugestao = ['eletrônicos', 'livros', 'mercado', 'moda', 'games'
 
 const icones = {
   logo: 'solar:tag-price-bold-duotone',
+  inicio: 'solar:home-2-bold-duotone',
   refresh: 'solar:refresh-bold-duotone',
   loja: 'solar:bag-4-bold-duotone',
   cliente: 'solar:user-heart-bold-duotone',
@@ -30,7 +31,6 @@ const icones = {
   sse: 'solar:bolt-circle-bold-duotone',
   rabbit: 'solar:routing-3-bold-duotone',
   chave: 'solar:key-minimalistic-square-2-bold-duotone',
-  voltar: 'solar:alt-arrow-left-bold-duotone',
   lua: 'solar:moon-bold-duotone',
   sol: 'solar:sun-bold-duotone',
 };
@@ -92,15 +92,22 @@ function tituloEvento(tipo = '') {
 function CabecalhoCompacto({ titulo, descricao, voltar, tema, alternarTema, acaoAtualizar }) {
   return (
     <header className="topo-app">
-      <button className="botao botao--icone" type="button" onClick={voltar} title="Voltar">
-        <Ico nome={icones.voltar} />
+      <button
+        className="botao botao--icone botao--voltar"
+        type="button"
+        onClick={voltar}
+        title="Voltar para a tela inicial"
+        aria-label="Voltar para a tela inicial"
+      >
+        <Ico nome={icones.inicio} />
       </button>
 
-      <div>
+      <div className="topo-app__texto">
         <span className="selo selo--compacto">
           <Ico nome={icones.logo} />
           Promoções
         </span>
+
         <h1>{titulo}</h1>
         <p>{descricao}</p>
       </div>
@@ -109,7 +116,7 @@ function CabecalhoCompacto({ titulo, descricao, voltar, tema, alternarTema, acao
         {acaoAtualizar && (
           <button className="botao botao--claro" type="button" onClick={acaoAtualizar}>
             <Ico nome={icones.refresh} />
-            Atualizar
+            Recarregar lista
           </button>
         )}
 
@@ -227,20 +234,48 @@ function TelaInicial({ abrirTela, promocoes, interesses, tema, alternarTema }) {
       </header>
 
       <section className="seletor-telas">
-        <button className="cartao opcao-tela opcao-tela--cliente" type="button" onClick={() => abrirTela('cliente')}>
+        <button
+          className="cartao opcao-tela opcao-tela--cliente"
+          type="button"
+          onClick={() => abrirTela('cliente')}
+          title="Clique para acessar a área do cliente"
+          aria-label="Acessar área do cliente"
+        >
           <span className="bolha bolha--roxa">
             <Ico nome={icones.cliente} />
           </span>
+
           <strong>Cliente</strong>
-          <span>Seguir categorias, receber SSE e votar em promoções.</span>
+
+          <span className="opcao-tela__descricao">
+            Seguir categorias, receber SSE e votar em promoções.
+          </span>
+
+          <span className="opcao-tela__dica">
+            Clique para acessar a área do cliente →
+          </span>
         </button>
 
-        <button className="cartao opcao-tela opcao-tela--vendedor" type="button" onClick={() => abrirTela('vendedor')}>
+        <button
+          className="cartao opcao-tela opcao-tela--vendedor"
+          type="button"
+          onClick={() => abrirTela('vendedor')}
+          title="Clique para acessar a área do vendedor"
+          aria-label="Acessar área do vendedor"
+        >
           <span className="bolha bolha--azul">
             <Ico nome={icones.loja} />
           </span>
+
           <strong>Vendedor</strong>
-          <span>Cadastrar promoções assinadas digitalmente.</span>
+
+          <span className="opcao-tela__descricao">
+            Cadastrar promoções assinadas digitalmente.
+          </span>
+
+          <span className="opcao-tela__dica">
+            Clique para acessar a área do vendedor →
+          </span>
         </button>
       </section>
 
@@ -408,12 +443,18 @@ function ListaPromocoes({ promocoes, votar, modo = 'cliente' }) {
 
               {modo === 'cliente' && (
                 <div className="botoes">
-                  <button className="botao botao--voto botao--positivo" onClick={() => votar(promo.promocao_id, 'positivo')}>
+                  <button
+                    className="botao botao--voto botao--positivo"
+                    onClick={() => votar(promo.promocao_id, 'positivo')}
+                  >
                     <Ico nome={icones.positivo} />
                     positivo
                   </button>
 
-                  <button className="botao botao--voto botao--negativo" onClick={() => votar(promo.promocao_id, 'negativo')}>
+                  <button
+                    className="botao botao--voto botao--negativo"
+                    onClick={() => votar(promo.promocao_id, 'negativo')}
+                  >
                     <Ico nome={icones.negativo} />
                     negativo
                   </button>
