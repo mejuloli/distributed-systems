@@ -1,203 +1,370 @@
 """
-MS Gateway 
-Responsável por receber as promoções submetidas vendedores e manter uma lista local das promoções validadas para os clientes. 
-Também é o ponto central para os clientes votarem, publicando os eventos de voto assinado para que o MS Promoção possa processá-los.
+MS Gateway/API
+--------------
+Expõe a API REST consumida pelo frontend, publica ações no RabbitMQ e mantém
+conexões SSE para consumidores interessados em categorias e hot deals.
 """
-import sys
-import os
+
 import json
-import uuid
+import os
+import queue
+import sys
 import threading
 import time
-# garante que o python encontre a pasta 'shared'
+
+from flask import Flask, Response, jsonify, request, stream_with_context
+from flask_cors import CORS
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from shared.rabbitmq_utils import (
-    get_connection, declare_exchange, publish_event,
-    payload_to_bytes, EXCHANGE_NAME,
-)
+
 from shared.crypto_utils import sign_event, verify_event
+from shared.rabbitmq_utils import (
+    EXCHANGE_NAME,
+    declare_exchange,
+    get_connection,
+    payload_to_bytes,
+    publish_event,
+)
 
 SERVICE_NAME = "gateway"
-QUEUE_NAME = "Fila_Gateway"
+QUEUE_NAME = "Fila_Gateway_API"
 
-# lista local para promoções validadas: ID -> payload
-promocoes_validadas: dict[str, dict] = {}
-_lock = threading.Lock()
-conn = None
+app = Flask(__name__)
+CORS(app)
 
-# ──────────────────────────────────────────────────────────────
-# funções de lógica de publicação
-# ──────────────────────────────────────────────────────────────
+promocoes: dict[str, dict] = {}
+interesses: dict[str, set[str]] = {}
+sse_clients: dict[str, list[queue.Queue]] = {}
+lock = threading.RLock()
 
-def publicar_promocao(titulo: str, categoria: str, descricao: str, preco: float):
-    # gera o payload da nova promoção
+
+def normalizar_categoria(categoria: str) -> str:
+    return (categoria or "").strip().lower()
+
+
+def resposta_erro(mensagem: str, status: int):
+    return jsonify({"erro": mensagem}), status
+
+
+def validar_payload_promocao(payload: dict):
+    campos = ["promocao_id", "loja_id", "loja_email", "titulo", "categoria", "descricao", "preco"]
+    ausentes = [campo for campo in campos if campo not in payload]
+    if ausentes:
+        return f"Campos ausentes: {', '.join(ausentes)}"
+
+    if not str(payload["promocao_id"]).strip():
+        return "promocao_id é obrigatório."
+    if not str(payload["loja_email"]).strip():
+        return "loja_email é obrigatório."
+    if not str(payload["titulo"]).strip():
+        return "titulo é obrigatório."
+    if not normalizar_categoria(payload["categoria"]):
+        return "categoria é obrigatória."
+    if not str(payload["descricao"]).strip():
+        return "descricao é obrigatória."
+
+    try:
+        preco = float(payload["preco"])
+    except (TypeError, ValueError):
+        return "preco deve ser numérico."
+
+    if preco <= 0:
+        return "preco deve ser maior que zero."
+
+    return None
+
+
+def registrar_cliente_sse(cliente_id: str) -> queue.Queue:
+    fila = queue.Queue()
+    with lock:
+        sse_clients.setdefault(cliente_id, []).append(fila)
+    return fila
+
+
+def remover_cliente_sse(cliente_id: str, fila: queue.Queue):
+    with lock:
+        filas = sse_clients.get(cliente_id, [])
+        if fila in filas:
+            filas.remove(fila)
+        if not filas:
+            sse_clients.pop(cliente_id, None)
+
+
+def enviar_sse(cliente_id: str, evento: dict):
+    with lock:
+        filas = list(sse_clients.get(cliente_id, []))
+
+    for fila in filas:
+        fila.put(evento)
+
+
+def enviar_sse_por_categoria(categoria: str, evento: dict):
+    categoria = normalizar_categoria(categoria)
+    with lock:
+        clientes = [
+            cliente_id
+            for cliente_id, categorias in interesses.items()
+            if categoria in categorias
+        ]
+
+    for cliente_id in clientes:
+        enviar_sse(cliente_id, evento)
+
+
+def enviar_sse_para_todos(evento: dict):
+    with lock:
+        clientes = list(sse_clients.keys())
+
+    for cliente_id in clientes:
+        enviar_sse(cliente_id, evento)
+
+
+@app.get("/api/health")
+def health():
+    return jsonify({"status": "ok"})
+
+
+@app.get("/api/promocoes")
+def listar_promocoes():
+    with lock:
+        dados = list(promocoes.values())
+
+    dados.sort(key=lambda item: item.get("titulo", "").lower())
+    return jsonify(dados)
+
+
+@app.post("/api/promocoes")
+def cadastrar_promocao():
+    envelope = request.get_json(silent=True) or {}
+    payload = envelope.get("payload")
+    assinatura = envelope.get("assinatura") or envelope.get("signature")
+
+    if not isinstance(payload, dict) or not assinatura:
+        return resposta_erro("Envie { payload, assinatura }.", 400)
+
+    erro = validar_payload_promocao(payload)
+    if erro:
+        return resposta_erro(erro, 400)
+
     payload = {
-        "promocao_id":  str(uuid.uuid4()),
-        "titulo":       titulo,
-        "categoria":    categoria.lower().strip(),
-        "descricao":    descricao,
-        "preco":        preco,
+        **payload,
+        "categoria": normalizar_categoria(payload["categoria"]),
+        "preco": float(payload["preco"]),
     }
-    # assina o evento com a chave privada do Gateway
-    sig = sign_event(payload_to_bytes(payload), SERVICE_NAME)
-    # envia para a routing key de recebimento
-    publish_event("promocao.recebida", payload, sig)
-    print("\n[MS Gateway] ✔ Enviado! Aguardando validação do MS Promoção...")
+
+    publish_event("promocao.recebida", payload, assinatura)
+    return jsonify({"mensagem": "Promoção recebida e enviada para validação."}), 202
 
 
-def votar_promocao(promocao: dict, voto: str):
-    # gera o payload do voto
+@app.post("/api/promocoes/<promocao_id>/votos")
+def votar_promocao(promocao_id: str):
+    dados = request.get_json(silent=True) or {}
+    voto = dados.get("voto")
+    if voto not in ("positivo", "negativo"):
+        return resposta_erro("voto deve ser positivo ou negativo.", 400)
+
+    with lock:
+        promocao = promocoes.get(promocao_id)
+
+    if not promocao:
+        return resposta_erro("Promoção não encontrada.", 404)
+
     payload = {
-        "promocao_id":  promocao["promocao_id"],
-        "titulo":       promocao["titulo"],
-        "categoria":    promocao["categoria"],
-        "descricao":    promocao["descricao"],
-        "preco":        promocao["preco"],
-        "voto":         voto,
+        "promocao_id": promocao["promocao_id"],
+        "loja_id": promocao.get("loja_id"),
+        "loja_email": promocao.get("loja_email"),
+        "titulo": promocao["titulo"],
+        "categoria": promocao["categoria"],
+        "descricao": promocao["descricao"],
+        "preco": promocao["preco"],
+        "voto": voto,
     }
-    # assina o evento
-    sig = sign_event(payload_to_bytes(payload), SERVICE_NAME)
-    # envia para a routing key de votos
-    publish_event("promocao.voto", payload, sig)
-    print(f"\n[MS Gateway] ✔ Voto '{voto}' computado.")
+    assinatura = sign_event(payload_to_bytes(payload), SERVICE_NAME)
+    publish_event("promocao.voto", payload, assinatura)
+    return jsonify({"mensagem": f"Voto {voto} enviado para processamento."}), 202
 
-# ────────────────────────────────────────────────────────────────
-# consumidor (thread de fundo) - escuta validações do MS Promoção
-# ────────────────────────────────────────────────────────────────
 
-def _on_promocao_publicada(ch, method, props, body):
-    # decodifica o envelope recebido
-    envelope= json.loads(body)
-    payload = envelope["payload"]
-    signature = envelope["signature"]
+@app.get("/api/interesses")
+def listar_interesses():
+    cliente_id = request.args.get("cliente_id", "").strip()
+    if not cliente_id:
+        return resposta_erro("cliente_id é obrigatório.", 400)
 
-    # validação RSA: verifica se quem publicou foi o MS Promoção
-    if not verify_event(payload_to_bytes(payload), signature, "promocao"):
-        print("\n\n[MS Gateway] Assinatura INVÁLIDA na promoção nova - descartado.")
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+    with lock:
+        categorias = sorted(interesses.get(cliente_id, set()))
+
+    return jsonify({"cliente_id": cliente_id, "categorias": categorias})
+
+
+@app.post("/api/interesses")
+def seguir_categoria():
+    dados = request.get_json(silent=True) or {}
+    cliente_id = str(dados.get("cliente_id", "")).strip()
+    categoria = normalizar_categoria(dados.get("categoria", ""))
+
+    if not cliente_id or not categoria:
+        return resposta_erro("cliente_id e categoria são obrigatórios.", 400)
+
+    with lock:
+        interesses.setdefault(cliente_id, set()).add(categoria)
+        categorias = sorted(interesses[cliente_id])
+
+    return jsonify({"cliente_id": cliente_id, "categorias": categorias})
+
+
+@app.delete("/api/interesses/<categoria>")
+def parar_categoria(categoria: str):
+    cliente_id = request.args.get("cliente_id", "").strip()
+    categoria = normalizar_categoria(categoria)
+
+    if not cliente_id or not categoria:
+        return resposta_erro("cliente_id e categoria são obrigatórios.", 400)
+
+    with lock:
+        interesses.setdefault(cliente_id, set()).discard(categoria)
+        categorias = sorted(interesses[cliente_id])
+
+    return jsonify({"cliente_id": cliente_id, "categorias": categorias})
+
+
+@app.get("/api/sse")
+def sse():
+    cliente_id = request.args.get("cliente_id", "").strip()
+    if not cliente_id:
+        return resposta_erro("cliente_id é obrigatório.", 400)
+
+    fila = registrar_cliente_sse(cliente_id)
+    fila.put({
+        "tipo": "conexao",
+        "mensagem": "Conexão SSE estabelecida.",
+    })
+
+    def stream():
+        try:
+            while True:
+                try:
+                    evento = fila.get(timeout=20)
+                    yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
+                except queue.Empty:
+                    yield "event: ping\ndata: {}\n\n"
+        finally:
+            remover_cliente_sse(cliente_id, fila)
+
+    return Response(
+        stream_with_context(stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def atualizar_promocao_publicada(payload: dict):
+    promocao = {
+        **payload,
+        "categoria": normalizar_categoria(payload.get("categoria", "")),
+        "hot_deal": bool(payload.get("hot_deal", False)),
+    }
+    with lock:
+        existente = promocoes.get(promocao["promocao_id"], {})
+        promocoes[promocao["promocao_id"]] = {**existente, **promocao}
+
+
+def marcar_hotdeal(payload: dict):
+    promocao_id = payload.get("promocao_id")
+    if not promocao_id:
         return
 
-    # salva na lista local de forma segura e define o total
-    with _lock:
-        promocoes_validadas[payload["promocao_id"]] = payload
-        total_atual = len(promocoes_validadas) # definindo a variável
-    
-    # aviso visual de que uma nova promoção chegou
-    print(f"\n\n{'─'*60}")
-    print(f" ✨ NOVA PROMOÇÃO VALIDADA: {payload['titulo']}")
-    print(f" 💰 Preço: R$ {payload['preco']:.2f}")
-    print(f" 📈 Total em memória: {total_atual} itens")
-    print(f"{'─'*60}")
-    print("(Menu desatualizado acima. Digite sua opção ou Enter para atualizar)")
-    
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+    with lock:
+        atual = promocoes.get(promocao_id, {})
+        promocoes[promocao_id] = {
+            **atual,
+            **payload,
+            "categoria": normalizar_categoria(payload.get("categoria", atual.get("categoria", ""))),
+            "hot_deal": True,
+        }
 
 
-def _consumer_thread():
-    """Thread separada para rodar o consumidor do RabbitMQ sem travar o menu."""
-    global conn
+def evento_sse(tipo: str, payload: dict) -> dict:
+    titulo = payload.get("titulo", "promoção")
+    categoria = normalizar_categoria(payload.get("categoria", ""))
+
+    if tipo == "hotdeal":
+        mensagem = f"{titulo} virou hot deal."
+    else:
+        mensagem = f"Nova promoção em {categoria}: {titulo}."
+
+    return {
+        "tipo": tipo,
+        "promocao_id": payload.get("promocao_id"),
+        "categoria": categoria,
+        "mensagem": mensagem,
+    }
+
+
+def on_evento(ch, method, props, body):
+    routing_key = method.routing_key
     try:
-        conn = get_connection()
-        ch = conn.channel()
-        declare_exchange(ch)
-        ch.queue_declare(queue=QUEUE_NAME, durable=True)
-        ch.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_NAME, routing_key="promocao.publicada")
-        ch.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_promocao_publicada)
-        print("[MS Gateway] Conector RabbitMQ pronto na porta 5673.")
-        ch.start_consuming()
-    except Exception as e:
-        print(f"\n[MS Gateway] Falha no consumidor: {e}")
+        envelope = json.loads(body)
+        payload = envelope["payload"]
+        assinatura = envelope["signature"]
 
+        produtores = {
+            "promocao.publicada": "promocao",
+            "promocao.categoria": "notificacao",
+            "promocao.destaque": "ranking",
+            "notificacao.hotdeal": "notificacao",
+        }
+        produtor = produtores.get(routing_key)
 
-# ──────────────────────────────────────────────────────────────
-# interface do usuário (menu terminal)
-# ──────────────────────────────────────────────────────────────
+        if not produtor or not verify_event(payload_to_bytes(payload), assinatura, produtor):
+            print(f"[MS Gateway] Assinatura inválida em '{routing_key}'. Evento descartado.")
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
 
-def _menu():
-    while True:
-        # exibe o cabeçalho com o contador de promoções em cache
-        print(f"\n--- [ STATUS: {len(promocoes_validadas)} itens validados ] ---")
-        print("╔══════════════════════════════════════════╗")
-        print("║     MS Gateway DE PROMOÇÕES - Gateway    ║")
-        print("╠══════════════════════════════════════════╣")
-        print("║  1. Cadastrar nova promoção              ║")
-        print("║  2. Listar promoções (Lista Local)       ║")
-        print("║  3. Votar em uma promoção                ║")
-        print("║  0. Sair                                 ║")
-        print("╚══════════════════════════════════════════╝")
-        
-        op = input("Escolha uma opção > ").strip()
+        if routing_key == "promocao.publicada":
+            atualizar_promocao_publicada(payload)
+            print(f"[MS Gateway] Promoção publicada em cache: {payload.get('titulo')}")
 
-        if op == "1":
-            # fluxo de cadastro
-            print("\n--- CADASTRO ---")
-            titulo = input("Título: ").strip()
-            categoria = input("Categoria: ").strip()
-            descricao = input("Descrição: ").strip()
-            try:
-                preco = float(input("Preço (R$): ").strip().replace(",", "."))
-                publicar_promocao(titulo, categoria, descricao, preco)
-            except ValueError:
-                print("\n[MS Gateway] Preço deve ser um número.")
+        elif routing_key == "promocao.categoria":
+            enviar_sse_por_categoria(payload.get("categoria", ""), evento_sse("categoria", payload))
+            print(f"[MS Gateway] SSE categoria enviado: {payload.get('categoria')}")
 
-        elif op == "2":
-            # lista o que está salvo na memória local do Gateway
-            with _lock:
-                proMS = list(promocoes_validadas.values())
-            if not proMS:
-                print("\n[MS Gateway] Nenhuma promoção validada na memória local.")
-            else:
-                print(f"\n{'ID (Resumido)':<15} | {'Título':<25} | {'Preço':<10}")
-                print("-" * 60)
-                for p in proMS:
-                    short_id = p['promocao_id'][:8] + "..."
-                    print(f"{short_id:<15} | {p['titulo']:<25} | R$ {p['preco']:.2f}")
-
-        elif op == "3":
-            # fluxo de votação
-            with _lock:
-                proMS = list(promocoes_validadas.values())
-            if not proMS:
-                print("\n[MS Gateway] Nada disponível para votação.")
-                continue
-            
-            for i, p in enumerate(proMS, 1):
-                print(f"{i}. {p['titulo']} (ID: {p['promocao_id'][:8]})")
-            
-            try:
-                idx = int(input("\nNúmero da promoção: ")) - 1
-                promo = proMS[idx]
-                voto = input("Voto (p = positivo / n = negativo): ").strip().lower()
-                voto_traduzido = "positivo" if voto == 'p' else "negativo"
-                votar_promocao(promo, voto_traduzido)
-            except (ValueError, IndexError):
-                print("\n[MS Gateway] Seleção inválida.")
-
-        elif op == "0":
-            # encerramento limpo do Gateway
-            encerrar_sistema()
-        
-        elif op == "":
-            continue
         else:
-            print("\n[MS Gateway] Opção inválida.")
+            marcar_hotdeal(payload)
+            enviar_sse_para_todos(evento_sse("hotdeal", payload))
+            print(f"[MS Gateway] SSE hot deal enviado: {payload.get('titulo')}")
+
+    except Exception as exc:
+        print(f"[MS Gateway] Erro ao processar evento: {exc}")
+    finally:
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-def encerrar_sistema():
-    global conn
-    if conn and conn.is_open:
-        conn.close()
-    os._exit(0)
+def consumer_thread():
+    while True:
+        try:
+            conn = get_connection()
+            ch = conn.channel()
+            declare_exchange(ch)
+            ch.queue_declare(queue=QUEUE_NAME, durable=True)
+
+            for routing_key in (
+                "promocao.publicada",
+                "promocao.categoria",
+                "promocao.destaque",
+                "notificacao.hotdeal",
+            ):
+                ch.queue_bind(exchange=EXCHANGE_NAME, queue=QUEUE_NAME, routing_key=routing_key)
+
+            ch.basic_qos(prefetch_count=1)
+            ch.basic_consume(queue=QUEUE_NAME, on_message_callback=on_evento)
+            print("[MS Gateway] Consumidor RabbitMQ iniciado.")
+            ch.start_consuming()
+        except Exception as exc:
+            print(f"[MS Gateway] Consumidor reiniciando após erro: {exc}")
+            time.sleep(3)
+
 
 if __name__ == "__main__":
-    # inicia o consumidor em uma thread separada para não travar o menu
-    t = threading.Thread(target=_consumer_thread, daemon=True)
-    t.start()
-    
-    # aguarda um pouco para que a mensagem de 'pronto' do consumidor apareça antes do menu
-    time.sleep(0.6)
-    try:
-        _menu()
-    except KeyboardInterrupt:
-        print("\n[MS Gateway] Interrompido pelo usuário (Ctrl+C). Encerrando...")
-        encerrar_sistema()
+    threading.Thread(target=consumer_thread, daemon=True).start()
+    port = int(os.getenv("GATEWAY_PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, threaded=True)
