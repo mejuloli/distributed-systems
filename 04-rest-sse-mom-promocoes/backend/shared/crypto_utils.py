@@ -1,5 +1,5 @@
 """
-Utilitários de criptografia assimétrica RSA (PKCS1v15 + SHA256).
+utilitários de criptografia assimétrica RSA (PKCS1v15 + SHA256).
 """
 
 import base64
@@ -37,8 +37,8 @@ def _load_public_key(service_name: str):
 
 def sign_event(payload_bytes: bytes, service_name: str) -> str:
     """
-    Assina payload_bytes com a chave privada de service_name.
-    Retorna a assinatura codificada em base64 (string).
+    assina payload_bytes com a chave privada de service_name.
+    retorna a assinatura codificada em base64 (string).
     """
     private_key = _load_private_key(service_name)
     signature = private_key.sign(
@@ -51,8 +51,8 @@ def sign_event(payload_bytes: bytes, service_name: str) -> str:
 
 def verify_event(payload_bytes: bytes, signature_b64: str, producer_service: str) -> bool:
     """
-    Verifica a assinatura base64 usando a chave pública de producer_service.
-    Retorna True se válida, False caso contrário.
+    verifica a assinatura base64 usando a chave pública de producer_service.
+    retorna True se válida, False caso contrário.
     """
     try:
         public_key = _load_public_key(producer_service)

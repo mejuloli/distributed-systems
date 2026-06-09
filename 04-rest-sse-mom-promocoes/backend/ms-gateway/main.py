@@ -1,7 +1,7 @@
 """
 MS Gateway/API
 --------------
-Expõe a API REST consumida pelo frontend, publica ações no RabbitMQ e mantém
+expõe a API REST consumida pelo frontend, publica ações no RabbitMQ e mantém
 conexões SSE para consumidores interessados em categorias e hot deals.
 """
 

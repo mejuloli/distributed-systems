@@ -1,8 +1,8 @@
 """
-Gera pares de chaves RSA para todos os produtores do projeto 04.
+gera pares de chaves RSA para todos os produtores do projeto 04.
 
-O Docker executa este script no serviço keygen antes dos microsserviços.
-As chaves são idempotentes: se o par já existir no volume, ele é preservado.
+o Docker executa o script no serviço keygen antes dos microsserviços.
+chaves são idempotentes: se o par já existir no volume, ele é preservado.
 """
 
 from cryptography.hazmat.primitives.asymmetric import rsa

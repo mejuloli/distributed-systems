@@ -1,15 +1,15 @@
 """
 MS Ranking
 ──────────
-Processa votos e identifica promoções em destaque (hot deal).
+processa votos e identifica promoções em destaque (hot deal).
 
-Consome : promocao.voto     (assinado com chave do MS Gateway)
-Publica : promocao.destaque (assinado com chave do MS Ranking)
+consome : promocao.voto     (assinado com chave do MS Gateway)
+publica : promocao.destaque (assinado com chave do MS Ranking)
 
-Regra de hot deal:
+regra de hot deal:
     score = votos_positivos - votos_negativos >= HOT_DEAL_SCORE (padrão: 5)
-    Ao atingir o limite, publica promocao.destaque para a promoção.
-    Apenas uma vez por promoção (hot deal é um status, não reverte se o score cair depois).
+    ao atingir o limite, publica promocao.destaque para a promoção.
+    apenas uma vez por promoção (hot deal é um status, não reverte se o score cair depois).
 """
 import sys
 import os

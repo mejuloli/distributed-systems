@@ -1,15 +1,15 @@
 """
 MS Promoção
 ───────────
-Gerencia e valida promoções recebidas.
+gerencia e valida promoções recebidas.
 
-Consome : promocao.recebida  (assinada com chave da loja)
-Publica : promocao.publicada (assinada com chave do MS Promoção)
+consome : promocao.recebida  (assinada com chave da loja)
+publica : promocao.publicada (assinada com chave do MS Promoção)
 
-Fluxo:
-  1. Recebe evento promocao.recebida
-  2. Valida assinatura digital da loja demo
-  3. Assina e publica promocao.publicada
+fluxo:
+  1. recebe evento promocao.recebida
+  2. valida assinatura digital da loja demo
+  3. assina e publica promocao.publicada
 """
 import sys
 import os
@@ -65,7 +65,7 @@ def _on_promocao_recebida(ch, method, props, body):
 
     print(f"[MS Promoção] Promoção registrada (id={payload['promocao_id']}).")
 
-    # 3. assina e publica promocao.publicada
+    # 2. assina e publica promocao.publicada
     sig_out = sign_event(payload_to_bytes(payload), SERVICE_NAME)
     publish_event("promocao.publicada", payload, sig_out)
     print(f"[MS Promoção] ✔ Evento 'promocao.publicada' publicado para '{payload['titulo']}'.")

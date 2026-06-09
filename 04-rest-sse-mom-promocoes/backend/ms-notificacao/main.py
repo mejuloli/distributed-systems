@@ -1,7 +1,7 @@
 """
 MS Notificação
 --------------
-Consome promoções publicadas e hot deals, envia e-mails para a loja e publica
+consome promoções publicadas e hot deals, envia e-mails para a loja e publica
 eventos assinados para o Gateway encaminhar por SSE.
 """
 

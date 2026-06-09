@@ -1,6 +1,6 @@
 """
-Utilitários de conexão e publicação no RabbitMQ.
-Exchange única do tipo 'topic' chamada 'Promocoes'.
+utilitários de conexão e publicação no RabbitMQ.
+exchange única do tipo 'topic' chamada 'Promocoes'.
 """
 
 import json
@@ -47,7 +47,7 @@ def declare_exchange(channel):
 
 
 def payload_to_bytes(payload: dict) -> bytes:
-    """Serializa payload para assinar/verificar."""
+    """serializa payload para assinar/verificar."""
     return json.dumps(
         payload,
         sort_keys=True,
@@ -58,9 +58,9 @@ def payload_to_bytes(payload: dict) -> bytes:
 
 def publish_event(routing_key: str, payload: dict, signature: str, channel=None):
     """
-    Publica um evento na exchange 'Promocoes'.
-    Envelope: { "payload": {...}, "signature": "base64..." }
-    Se channel for None, abre e fecha uma conexão temporária.
+    publica um evento na exchange 'Promocoes'.
+    envelope: { "payload": {...}, "signature": "base64..." }
+    se channel for None, abre e fecha uma conexão temporária.
     """
     envelope = {
         "payload":   payload,
