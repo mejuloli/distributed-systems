@@ -1,9 +1,12 @@
-# 🖥️ Sistemas Distribuídos - UTFPR
+# Sistemas Distribuídos - UTFPR
 
-Projetos desenvolvidos para a disciplina de Sistemas Distribuídos. O repositório contém implementações de microsserviços, mensageria e outros paradigmas de comunicação.
+Projetos desenvolvidos para a disciplina de **Sistemas Distribuídos** da UTFPR.
 
-## 🚀 Avaliações
-* **02 - MOM / RabbitMQ:** Sistema de promoções orientado a eventos.
-* **03 - PyRO:** (Em breve)
-* **04 - REST:** (Em breve)
+O repositório reúne implementações de microsserviços, mensageria, comunicação REST, SSE, objetos distribuídos e outros paradigmas de sistemas distribuídos.
+
+## Projetos
+
+* **02 - MOM / RabbitMQ:** Sistema de promoções orientado a eventos com mensageria RabbitMQ.
+* **03 - PyRO:** Implementação de consenso distribuído com Raft e comunicação via PyRO.
+* **04 - REST + SSE + RabbitMQ:** Sistema web de promoções com frontend React, API REST, notificações em tempo real via SSE, RabbitMQ, assinatura digital e envio de e-mails.
 * **05 - gRPC:** (Em breve)
